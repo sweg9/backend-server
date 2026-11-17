@@ -1,0 +1,9 @@
+# Risk sorting of device types (FR-06, C-12). Types not listed, and `other`, are high.
+risk:
+  light: low
+  fan: low
+  tv: low
+  air_purifier: low
+  heater: high
+  electric_blanket: high
+  microwave: high

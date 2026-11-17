@@ -1,0 +1,20 @@
+# Hub mode (the laptop at home). Starting values to be tuned (C-12).
+# Secrets are never here: HUB_TOKEN comes from the environment (C-10).
+cloud_url: wss://localhost:8000/ws/hub
+hand: script                 # linear_actuators | unity_sim | script (FR-11, C-13)
+serial_port: null            # for example /dev/tty.usbserial-0001 with linear_actuators
+camera_index: 0
+data_dir: data/hub           # outbox.jsonl, pulled backups; git-ignored
+spots:                       # spot_id -> room; the team member picks the names
+  living_wall_1: living_room
+actuators:                   # which part of the image each actuator faces (FR-09)
+  - {id: A1, faces: [0.0, 0.0, 0.5, 1.0]}
+  - {id: A2, faces: [0.5, 0.0, 1.0, 1.0]}
+heartbeat_s: 5
+channel_timeout_s: 5         # FR-07
+effect_wait_s: 3             # FR-08
+unsure_recheck_s: 3          # FR-08
+max_press_tries: 2           # FR-11
+watch_interval_s: 2          # uses for habits
+watch_quiet_s: 10
+outbox_max_age_days: 7

@@ -1,0 +1,30 @@
+# Cloud mode (EC2). Starting values to be tuned (C-12).
+# Secrets are never here: APP_PASSWORD_HASH and HUB_TOKEN come from the environment (C-10).
+database_url: sqlite:///data/cloud/app.db
+crop_dir: data/cloud/crops
+time_zone: Asia/Seoul
+single_worker: true          # SQLite, the scheduler and the hub's WebSocket live in one process
+confidence_high: 0.8         # FR-06
+confidence_low: 0.5
+duplicate_trigger_s: 10      # FR-05
+habit_window_min: 30         # FR-04
+habit_min_days: 3
+habit_lookback_days: 14
+habit_run_at: "04:00"        # local time
+habit_independence: ask_first
+habit_removed_block_days: 30
+demote_after_rejections: 3   # FR-04
+channel_newest_weight: 0.3   # FR-12
+link_confidence_step: 0.05   # FR-12
+stale_below: 0.2
+fingerprint_same_control: 0.9  # FR-01 duplicate check; to be measured
+hub_offline_after_missed: 3
+ack_batch_ms: 200
+scan_start_ack_s: 5
+stop_ack_s: 2
+session_days: 30
+login_max_failures: 5
+login_window_s: 60
+hub_messages_keep_days: 7
+uses_keep_days: 60
+crops_unreferenced_keep_days: 30
