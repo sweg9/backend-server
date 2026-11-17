@@ -1,7 +1,7 @@
 [project]
 name = "backend-server"
 version = "0.1.0"
-description = "sweg9 backend in two modes: hub (laptop at home) and cloud (EC2). FR-02 to FR-07, FR-10 to FR-12"
+description = "sweg9 backend in two modes: hub and server, both on the laptop at home (the server on k8s). FR-02 to FR-07, FR-10 to FR-12"
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "pydantic>=2.7",
@@ -9,8 +9,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Cloud mode: API, database, scheduler. No YOLO, no PyTorch.
-cloud = [
+# Server mode: API, database, scheduler. No YOLO, no PyTorch.
+server = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "sqlalchemy>=2.0",
@@ -61,19 +61,19 @@ root_package = "backend"
 include_external_packages = true
 
 [[tool.importlinter.contracts]]
-name = "hub and cloud never import each other"
+name = "hub and server never import each other"
 type = "independence"
-modules = ["backend.hub", "backend.cloud"]
+modules = ["backend.hub", "backend.server"]
 
 [[tool.importlinter.contracts]]
 name = "common imports neither mode"
 type = "forbidden"
 source_modules = ["backend.common"]
-forbidden_modules = ["backend.hub", "backend.cloud"]
+forbidden_modules = ["backend.hub", "backend.server"]
 
 [[tool.importlinter.contracts]]
 name = "only the hub imports ai_engine"
 type = "forbidden"
-source_modules = ["backend.common", "backend.cloud"]
+source_modules = ["backend.common", "backend.server"]
 forbidden_modules = ["ai_engine"]
 allow_indirect_imports = true

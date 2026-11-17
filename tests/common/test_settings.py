@@ -1,12 +1,12 @@
 """C-12: the settings files load into their models, and unknown device types are high risk."""
 
-from backend.common.settings import CloudSettings, HubSettings, RiskSettings, load, risk_of
+from backend.common.settings import HubSettings, RiskSettings, ServerSettings, load, risk_of
 from backend.common.vocab import DeviceType, Risk
 
 
 def test_settings_files_load():
     load(HubSettings, "hub.yaml")
-    load(CloudSettings, "cloud.yaml")
+    load(ServerSettings, "server.yaml")
     load(RiskSettings, "risk.yaml")
 
 

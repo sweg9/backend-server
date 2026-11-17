@@ -1,0 +1,97 @@
+# Grafana Alloy: the server pod's stdout and the hub's log files to Loki (wiki: Stack > Logging).
+# Labels stay few: mode, level, module. run_id stays in the line and is searched with | json.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: alloy
+  namespace: logging
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: alloy
+rules:
+  - apiGroups: [""]
+    resources: [pods, pods/log, nodes]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: alloy
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: alloy}
+subjects:
+  - {kind: ServiceAccount, name: alloy, namespace: logging}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alloy
+  namespace: logging
+data:
+  config.alloy: |
+    discovery.kubernetes "pods" {
+      role = "pod"
+      namespaces { names = ["sweg9"] }
+    }
+
+    loki.source.kubernetes "server" {
+      targets    = discovery.kubernetes.pods.targets
+      forward_to = [loki.process.json.receiver]
+    }
+
+    local.file_match "hub" {
+      path_targets = [{"__path__" = "/sweg9-data/hub-logs/*.log"}]
+    }
+
+    loki.source.file "hub" {
+      targets    = local.file_match.hub.targets
+      forward_to = [loki.process.json.receiver]
+    }
+
+    loki.process "json" {
+      stage.json {
+        expressions = {level = "level", mode = "mode", module = "module", ts = "ts"}
+      }
+      stage.timestamp {
+        source = "ts"
+        format = "RFC3339"
+      }
+      stage.labels {
+        values = {level = "", mode = "", module = ""}
+      }
+      forward_to = [loki.write.local.receiver]
+    }
+
+    loki.write "local" {
+      endpoint { url = "http://loki.logging.svc:3100/loki/api/v1/push" }
+    }
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: alloy
+  namespace: logging
+spec:
+  selector:
+    matchLabels: {app: alloy}
+  template:
+    metadata:
+      labels: {app: alloy}
+    spec:
+      serviceAccountName: alloy
+      containers:
+        - name: alloy
+          image: grafana/alloy:v1.5.1
+          args: [run, /etc/alloy/config.alloy, --storage.path=/var/lib/alloy, --disable-reporting]
+          volumeMounts:
+            - {name: config, mountPath: /etc/alloy}
+            - {name: hub-logs, mountPath: /sweg9-data/hub-logs, readOnly: true}
+          resources:
+            requests: {cpu: 20m, memory: 64Mi}
+            limits: {cpu: 200m, memory: 192Mi}
+      volumes:
+        - name: config
+          configMap: {name: alloy}
+        - name: hub-logs
+          hostPath: {path: /sweg9-data/hub-logs, type: DirectoryOrCreate}

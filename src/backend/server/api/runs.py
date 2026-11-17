@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from backend.cloud.api.common import not_built
+from backend.server.api.common import not_built
 
 router = APIRouter(tags=["Runs"])
 

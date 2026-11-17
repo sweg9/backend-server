@@ -1,0 +1,33 @@
+# One host for the app and the API, so the session cookie is same-origin (wiki: Stack > Sign-in).
+# Traefik is the ingress built into k3s. TLS from mkcert, in the Secret sweg9-tls.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: strip-api
+  namespace: sweg9
+spec:
+  stripPrefix:
+    prefixes: [/api]
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: sweg9
+  namespace: sweg9
+spec:
+  entryPoints: [websecure]
+  routes:
+    - match: Host(`sweg9.localhost`) && PathPrefix(`/api`)   # API, /api/ws/app and /api/ws/hub
+      kind: Rule
+      middlewares:
+        - name: strip-api
+      services:
+        - name: server
+          port: 8000
+    # - match: Host(`sweg9.localhost`)                         # the app, with server/web.yaml
+    #   kind: Rule
+    #   services:
+    #     - name: web
+    #       port: 80
+  tls:
+    secretName: sweg9-tls

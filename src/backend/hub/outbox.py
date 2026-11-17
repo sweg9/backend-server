@@ -35,7 +35,7 @@ class Outbox:
         self._rewrite()
 
     def pending(self, now: datetime | None = None) -> list[Envelope]:
-        """Messages to send again, oldest first. Drops the ones the cloud would no longer recognize."""
+        """Messages to send again, oldest first. Drops the ones the server would no longer recognize."""
         now = now or datetime.now(UTC)
         keep = [m for m in self._items if now - m.sent_at <= self.max_age]
         if len(keep) != len(self._items):

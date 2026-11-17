@@ -1,7 +1,10 @@
-# Cloud mode (EC2). Starting values to be tuned (C-12).
-# Secrets are never here: APP_PASSWORD_HASH and HUB_TOKEN come from the environment (C-10).
-database_url: sqlite:///data/cloud/app.db
-crop_dir: data/cloud/crops
+# Server mode (a pod on k8s on the laptop at home). Starting values to be tuned (C-12).
+# In k8s this file comes from a ConfigMap; paths are relative to the working directory /app.
+# Secrets are never here: APP_PASSWORD_HASH and HUB_TOKEN come from a k8s Secret (C-10).
+database_url: sqlite:///data/server/app.db
+crop_dir: data/server/crops
+backup_dir: data/backups     # a hostPath folder outside the cluster (~/sweg9-data/backups)
+backup_keep_days: 7
 time_zone: Asia/Seoul
 single_worker: true          # SQLite, the scheduler and the hub's WebSocket live in one process
 confidence_high: 0.8         # FR-06

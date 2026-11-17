@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import create_engine, inspect, text
 
-from backend.cloud.db.models import Base
+from backend.server.db.models import Base
 
 ROOT = Path(__file__).resolve().parents[2]
 

@@ -1,0 +1,17 @@
+# One-node cluster on the laptop (wiki: Stack > Deployment on Kubernetes).
+# Create with: k3d cluster create --config deploy/k3d.yaml
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: sweg9
+servers: 1
+agents: 0
+image: rancher/k3s:v1.31.4-k3s1
+ports:
+  - port: 443:443            # https://sweg9.localhost and https://grafana.sweg9.localhost
+    nodeFilters: [loadbalancer]
+volumes:
+  # Data lives on the laptop, outside the cluster: deleting the cluster loses nothing.
+  # server/ (app.db, crops), backups/, loki/, hub-logs/ (written by the hub, read by Alloy)
+  - volume: ${HOME}/sweg9-data:/sweg9-data
+    nodeFilters: [server:0]

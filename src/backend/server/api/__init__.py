@@ -1,4 +1,4 @@
-from backend.cloud.api import controls, devices, mappings, routines, runs, safety, session
+from backend.server.api import controls, devices, mappings, routines, runs, safety, session
 
 ROUTERS = [
     session.router,

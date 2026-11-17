@@ -1,11 +1,11 @@
-"""The cloud's routes are exactly the operations of openapi/backend-server.yaml."""
+"""The server's routes are exactly the operations of openapi/backend-server.yaml."""
 
 from pathlib import Path
 
 import yaml
 from fastapi.testclient import TestClient
 
-from backend.cloud.main import create_app
+from backend.server.main import create_app
 
 SPEC = Path(__file__).resolve().parents[2] / "openapi" / "backend-server.yaml"
 
@@ -28,3 +28,8 @@ def test_errors_use_the_one_shape():
     r = TestClient(create_app()).get("/controls")
     assert r.status_code == 501
     assert set(r.json()) == {"code", "message", "reason"}
+
+
+def test_healthz_is_outside_the_spec():
+    r = TestClient(create_app()).get("/healthz")
+    assert r.status_code == 200

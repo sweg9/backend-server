@@ -1,4 +1,4 @@
-"""Create the cloud tables
+"""Create the server tables
 
 Revision ID: 13e4a5c322a3
 Revises:
@@ -11,8 +11,8 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
-import backend.cloud.db.models
-from backend.cloud.db.models import APPEND_ONLY_TRIGGERS
+import backend.server.db.models
+from backend.server.db.models import APPEND_ONLY_TRIGGERS
 
 
 # revision identifiers, used by Alembic.
@@ -38,7 +38,7 @@ def upgrade() -> None:
         sa.Column("path", sa.String(), nullable=False),
         sa.Column("w", sa.Integer(), nullable=False),
         sa.Column("h", sa.Integer(), nullable=False),
-        sa.Column("received_at", backend.cloud.db.models.UtcTime(length=24), nullable=False),
+        sa.Column("received_at", backend.server.db.models.UtcTime(length=24), nullable=False),
         sa.CheckConstraint("kind IN ('control', 'device_before', 'device_after', 'check')", name="ck_kind"),
         sa.PrimaryKeyConstraint("crop_id"),
     )
@@ -49,8 +49,8 @@ def upgrade() -> None:
         sa.Column("type", sa.String(), nullable=False),
         sa.Column("room", sa.String(), nullable=False),
         sa.Column("risk", sa.String(), nullable=False),
-        sa.Column("created_at", backend.cloud.db.models.UtcTime(length=24), nullable=False),
-        sa.Column("updated_at", backend.cloud.db.models.UtcTime(length=24), nullable=False),
+        sa.Column("created_at", backend.server.db.models.UtcTime(length=24), nullable=False),
+        sa.Column("updated_at", backend.server.db.models.UtcTime(length=24), nullable=False),
         sa.CheckConstraint("risk IN ('low', 'high')", name="ck_risk"),
         sa.CheckConstraint(
             "type IN ('light', 'fan', 'tv', 'air_purifier', 'heater', 'electric_blanket', 'microwave', 'other')",
@@ -62,7 +62,7 @@ def upgrade() -> None:
         "hub_messages",
         sa.Column("id", sa.String(), nullable=False),
         sa.Column("type", sa.String(), nullable=False),
-        sa.Column("received_at", backend.cloud.db.models.UtcTime(length=24), nullable=False),
+        sa.Column("received_at", backend.server.db.models.UtcTime(length=24), nullable=False),
         sa.PrimaryKeyConstraint("id"),
     )
     with op.batch_alter_table("hub_messages", schema=None) as batch_op:
@@ -71,8 +71,8 @@ def upgrade() -> None:
     op.create_table(
         "runs",
         sa.Column("run_id", sa.String(), nullable=False),
-        sa.Column("started_at", backend.cloud.db.models.UtcTime(length=24), nullable=False),
-        sa.Column("ended_at", backend.cloud.db.models.UtcTime(length=24), nullable=False),
+        sa.Column("started_at", backend.server.db.models.UtcTime(length=24), nullable=False),
+        sa.Column("ended_at", backend.server.db.models.UtcTime(length=24), nullable=False),
         sa.Column("trigger", sa.String(), nullable=False),
         sa.Column("routine_id", sa.String(), nullable=True),
         sa.Column("device_id", sa.String(), nullable=True),
@@ -95,8 +95,8 @@ def upgrade() -> None:
         "scans",
         sa.Column("scan_id", sa.String(), nullable=False),
         sa.Column("spot_id", sa.String(), nullable=False),
-        sa.Column("started_at", backend.cloud.db.models.UtcTime(length=24), nullable=False),
-        sa.Column("done_at", backend.cloud.db.models.UtcTime(length=24), nullable=True),
+        sa.Column("started_at", backend.server.db.models.UtcTime(length=24), nullable=False),
+        sa.Column("done_at", backend.server.db.models.UtcTime(length=24), nullable=True),
         sa.Column("found", sa.Integer(), nullable=True),
         sa.Column("skipped", sa.Integer(), nullable=True),
         sa.Column("reason", sa.Text(), nullable=True),
@@ -105,8 +105,8 @@ def upgrade() -> None:
     op.create_table(
         "sessions",
         sa.Column("token_hash", sa.String(length=64), nullable=False),
-        sa.Column("created_at", backend.cloud.db.models.UtcTime(length=24), nullable=False),
-        sa.Column("expires_at", backend.cloud.db.models.UtcTime(length=24), nullable=False),
+        sa.Column("created_at", backend.server.db.models.UtcTime(length=24), nullable=False),
+        sa.Column("expires_at", backend.server.db.models.UtcTime(length=24), nullable=False),
         sa.PrimaryKeyConstraint("token_hash"),
     )
     with op.batch_alter_table("sessions", schema=None) as batch_op:
@@ -120,7 +120,7 @@ def upgrade() -> None:
         sa.Column("success_score", sa.Float(), nullable=False),
         sa.Column("latency_ms", sa.Integer(), nullable=False),
         sa.Column("tries", sa.Integer(), nullable=False),
-        sa.Column("updated_at", backend.cloud.db.models.UtcTime(length=24), nullable=False),
+        sa.Column("updated_at", backend.server.db.models.UtcTime(length=24), nullable=False),
         sa.CheckConstraint("channel IN ('IR', 'WIFI', 'BT', 'ARM')", name="ck_channel"),
         sa.CheckConstraint("success_score BETWEEN 0 AND 1", name="ck_success_score"),
         sa.ForeignKeyConstraint(
@@ -141,8 +141,8 @@ def upgrade() -> None:
         sa.Column("crop_id", sa.String(), nullable=True),
         sa.Column("seen_spot_id", sa.String(), nullable=False),
         sa.Column("press_spot_id", sa.String(), nullable=True),
-        sa.Column("seen_at", backend.cloud.db.models.UtcTime(length=24), nullable=False),
-        sa.Column("created_at", backend.cloud.db.models.UtcTime(length=24), nullable=False),
+        sa.Column("seen_at", backend.server.db.models.UtcTime(length=24), nullable=False),
+        sa.Column("created_at", backend.server.db.models.UtcTime(length=24), nullable=False),
         sa.CheckConstraint("kind IN ('switch', 'toggle', 'power_strip')", name="ck_kind"),
         sa.CheckConstraint("state IN ('on', 'off', 'unknown')", name="ck_state"),
         sa.ForeignKeyConstraint(
@@ -169,8 +169,8 @@ def upgrade() -> None:
         sa.Column("before_crop_id", sa.String(), nullable=False),
         sa.Column("after_crop_id", sa.String(), nullable=False),
         sa.Column("status_reason", sa.Text(), nullable=True),
-        sa.Column("created_at", backend.cloud.db.models.UtcTime(length=24), nullable=False),
-        sa.Column("updated_at", backend.cloud.db.models.UtcTime(length=24), nullable=False),
+        sa.Column("created_at", backend.server.db.models.UtcTime(length=24), nullable=False),
+        sa.Column("updated_at", backend.server.db.models.UtcTime(length=24), nullable=False),
         sa.CheckConstraint("control_after IN ('on', 'off', 'unknown')", name="ck_control_after"),
         sa.CheckConstraint("control_before IN ('on', 'off', 'unknown')", name="ck_control_before"),
         sa.CheckConstraint("device_id IS NOT NULL OR status = 'Pending'", name="ck_device_unless_pending"),
@@ -210,7 +210,7 @@ def upgrade() -> None:
         sa.Column("device_id", sa.String(), nullable=False),
         sa.Column("control_id", sa.String(), nullable=True),
         sa.Column("action", sa.String(), nullable=False),
-        sa.Column("at", backend.cloud.db.models.UtcTime(length=24), nullable=False),
+        sa.Column("at", backend.server.db.models.UtcTime(length=24), nullable=False),
         sa.Column("source", sa.String(), nullable=False),
         sa.CheckConstraint("action IN ('on', 'off')", name="ck_action"),
         sa.CheckConstraint("source IN ('watch', 'seed')", name="ck_source"),
@@ -237,9 +237,9 @@ def upgrade() -> None:
         sa.Column("independence", sa.String(), nullable=False),
         sa.Column("priority", sa.Float(), nullable=False),
         sa.Column("reject_streak", sa.Integer(), nullable=False),
-        sa.Column("created_at", backend.cloud.db.models.UtcTime(length=24), nullable=False),
-        sa.Column("updated_at", backend.cloud.db.models.UtcTime(length=24), nullable=False),
-        sa.Column("removed_at", backend.cloud.db.models.UtcTime(length=24), nullable=True),
+        sa.Column("created_at", backend.server.db.models.UtcTime(length=24), nullable=False),
+        sa.Column("updated_at", backend.server.db.models.UtcTime(length=24), nullable=False),
+        sa.Column("removed_at", backend.server.db.models.UtcTime(length=24), nullable=True),
         sa.CheckConstraint("action IN ('on', 'off')", name="ck_action"),
         sa.CheckConstraint("independence IN ('act_and_tell', 'ask_first', 'suggest_only')", name="ck_independence"),
         sa.CheckConstraint("source IN ('habit', 'manual')", name="ck_source"),
@@ -256,7 +256,7 @@ def upgrade() -> None:
         sa.Column("run_id", sa.String(), nullable=True),
         sa.Column("kind", sa.String(), nullable=False),
         sa.Column("detail", sa.JSON(), nullable=True),
-        sa.Column("at", backend.cloud.db.models.UtcTime(length=24), nullable=False),
+        sa.Column("at", backend.server.db.models.UtcTime(length=24), nullable=False),
         sa.CheckConstraint("kind IN ('keep', 'change', 'remove', 'accept', 'reject')", name="ck_kind"),
         sa.ForeignKeyConstraint(
             ["routine_id"],
@@ -276,7 +276,7 @@ def upgrade() -> None:
         sa.Column("confidence", sa.Float(), nullable=False),
         sa.Column("risk", sa.String(), nullable=False),
         sa.Column("phase", sa.String(), nullable=False),
-        sa.Column("started_at", backend.cloud.db.models.UtcTime(length=24), nullable=False),
+        sa.Column("started_at", backend.server.db.models.UtcTime(length=24), nullable=False),
         sa.Column("dedup_key", sa.String(), nullable=False),
         sa.CheckConstraint("action IN ('on', 'off')", name="ck_action"),
         sa.CheckConstraint("decision IN ('act', 'ask', 'suggest')", name="ck_decision"),

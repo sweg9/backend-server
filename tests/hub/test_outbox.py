@@ -32,7 +32,7 @@ def test_progress_does_not_go_in_the_outbox(tmp_path):
         Outbox(tmp_path / "o.jsonl", 7).add(msg(1, "run.progress"))
 
 
-def test_messages_older_than_the_cloud_remembers_are_dropped(tmp_path):
+def test_messages_older_than_the_server_remembers_are_dropped(tmp_path):
     box = Outbox(tmp_path / "o.jsonl", max_age_days=7)
     box.add(msg(1, age_days=8))
     box.add(msg(2))

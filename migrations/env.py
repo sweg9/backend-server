@@ -1,20 +1,20 @@
-"""Alembic environment. The database URL comes from settings/cloud.yaml, or DATABASE_URL if set."""
+"""Alembic environment. The database URL comes from settings/server.yaml, or DATABASE_URL if set."""
 
 import os
 from pathlib import Path
 
 from alembic import context
 
-from backend.cloud.db.models import Base
-from backend.cloud.db.session import make_engine
-from backend.common.settings import CloudSettings, load
+from backend.common.settings import ServerSettings, load
+from backend.server.db.models import Base
+from backend.server.db.session import make_engine
 
 config = context.config
 target_metadata = Base.metadata
 
 
 def database_url() -> str:
-    return os.environ.get("DATABASE_URL") or load(CloudSettings, "cloud.yaml").database_url
+    return os.environ.get("DATABASE_URL") or load(ServerSettings, "server.yaml").database_url
 
 
 def run_migrations_offline() -> None:

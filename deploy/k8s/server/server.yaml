@@ -1,0 +1,70 @@
+# The server: exactly one pod. SQLite, the scheduler and the hub's WebSocket live in one process,
+# and a second pod would fire every trigger twice (wiki: Modules > server).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: server
+  namespace: sweg9
+  labels: {app: server}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}   # never two pods, not even during an update
+  selector:
+    matchLabels: {app: server}
+  template:
+    metadata:
+      labels: {app: server}
+    spec:
+      initContainers:
+        - name: own-data      # hostPath folders are made by root; the server runs as uid 10001
+          image: busybox:1.37
+          command: [sh, -c, "chown -R 10001:10001 /app/data/server"]
+          securityContext: {runAsUser: 0}
+          volumeMounts:
+            - {name: data, mountPath: /app/data/server}
+        - name: migrate
+          image: sweg9/backend-server:dev
+          imagePullPolicy: Never
+          command: [alembic, upgrade, head]
+          volumeMounts:
+            - {name: settings, mountPath: /app/settings/server.yaml, subPath: server.yaml}
+            - {name: settings, mountPath: /app/settings/risk.yaml, subPath: risk.yaml}
+            - {name: data, mountPath: /app/data/server}
+      containers:
+        - name: server
+          image: sweg9/backend-server:dev
+          imagePullPolicy: Never
+          args: [server, --host, 0.0.0.0, --port, "8000"]
+          ports:
+            - {name: http, containerPort: 8000}
+          envFrom:
+            - secretRef: {name: app}   # HUB_TOKEN, APP_PASSWORD_HASH
+          volumeMounts:
+            - {name: settings, mountPath: /app/settings/server.yaml, subPath: server.yaml}
+            - {name: settings, mountPath: /app/settings/risk.yaml, subPath: risk.yaml}
+            - {name: data, mountPath: /app/data/server}
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: 500m, memory: 512Mi}
+      volumes:
+        - name: settings
+          configMap: {name: server-settings}
+        - name: data
+          hostPath: {path: /sweg9-data/server, type: DirectoryOrCreate}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: server
+  namespace: sweg9
+spec:
+  selector: {app: server}
+  ports:
+    - {name: http, port: 8000, targetPort: http}

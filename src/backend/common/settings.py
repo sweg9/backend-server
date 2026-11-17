@@ -25,11 +25,14 @@ class Actuator(Strict):
 
 
 class HubSettings(Strict):
-    cloud_url: str
+    server_url: str
     hand: HandOption
     serial_port: str | None
     camera_index: int
     data_dir: str
+    log_file: str
+    log_max_mb: int
+    log_keep_files: int
     spots: dict[str, str]  # spot_id -> room
     actuators: list[Actuator]
     heartbeat_s: float
@@ -42,9 +45,11 @@ class HubSettings(Strict):
     outbox_max_age_days: int
 
 
-class CloudSettings(Strict):
+class ServerSettings(Strict):
     database_url: str
     crop_dir: str
+    backup_dir: str
+    backup_keep_days: int
     time_zone: str
     single_worker: bool
     confidence_high: float  # FR-06

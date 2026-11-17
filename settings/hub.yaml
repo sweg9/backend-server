@@ -1,10 +1,13 @@
 # Hub mode (the laptop at home). Starting values to be tuned (C-12).
 # Secrets are never here: HUB_TOKEN comes from the environment (C-10).
-cloud_url: wss://localhost:8000/ws/hub
+server_url: wss://sweg9.localhost/api/ws/hub   # through the k3d ingress
 hand: script                 # linear_actuators | unity_sim | script (FR-11, C-13)
 serial_port: null            # for example /dev/tty.usbserial-0001 with linear_actuators
 camera_index: 0
-data_dir: data/hub           # outbox.jsonl, pulled backups; git-ignored
+data_dir: data/hub           # outbox.jsonl; git-ignored
+log_file: ~/sweg9-data/hub-logs/hub.log   # read by Alloy through the k3d node mount
+log_max_mb: 10
+log_keep_files: 5
 spots:                       # spot_id -> room; the team member picks the names
   living_wall_1: living_room
 actuators:                   # which part of the image each actuator faces (FR-09)

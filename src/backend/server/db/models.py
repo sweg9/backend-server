@@ -1,4 +1,4 @@
-"""The cloud's tables (wiki: Overview > Database). Alembic migrations are made from these models."""
+"""The server's tables (wiki: Overview > Database). Alembic migrations are made from these models."""
 
 from datetime import UTC, datetime
 from enum import StrEnum

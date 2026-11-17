@@ -1,0 +1,14 @@
+# kubectl apply -k deploy/k8s
+# Made outside this folder by deploy/up.sh, never committed: the Secrets `app`, `grafana`
+# and the TLS secrets `sweg9-tls` (C-10), and the ConfigMap `server-settings` from settings/.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespaces.yaml
+  - server/server.yaml
+  - server/backup.yaml
+  - server/ingress.yaml
+  - logging/loki.yaml
+  - logging/alloy.yaml
+  - logging/grafana.yaml
+  # - server/web.yaml        # add when live-demo builds the sweg9/live-demo image

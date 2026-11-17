@@ -1,16 +1,21 @@
-"""The cloud app: FastAPI with one worker (wiki: Modules > cloud)."""
+"""The server app: FastAPI with one worker (wiki: Modules > server)."""
 
 from fastapi import FastAPI, Request, WebSocket
 from fastapi.exceptions import HTTPException
 from fastapi.responses import JSONResponse
 
-from backend.cloud.api import ROUTERS
+from backend.server.api import ROUTERS
 
 
 def create_app() -> FastAPI:
     app = FastAPI(title="backend-server", version="0.1.0")
     for r in ROUTERS:
         app.include_router(r)
+
+    @app.get("/healthz", include_in_schema=False)
+    def healthz():
+        """For the k8s readiness and liveness probes. Not part of the API spec."""
+        return {"ok": True}
 
     @app.exception_handler(HTTPException)
     async def _error_shape(_req: Request, exc: HTTPException):

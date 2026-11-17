@@ -1,0 +1,87 @@
+# Loki, single binary, files on the laptop, 14 days of logs (wiki: Stack > Logging).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loki
+  namespace: logging
+data:
+  loki.yaml: |
+    auth_enabled: false
+    server:
+      http_listen_port: 3100
+    common:
+      path_prefix: /loki
+      replication_factor: 1
+      ring:
+        kvstore: {store: inmemory}
+      storage:
+        filesystem:
+          chunks_directory: /loki/chunks
+          rules_directory: /loki/rules
+    schema_config:
+      configs:
+        - from: "2026-11-01"
+          store: tsdb
+          object_store: filesystem
+          schema: v13
+          index: {prefix: index_, period: 24h}
+    limits_config:
+      retention_period: 336h
+    compactor:
+      working_directory: /loki/compactor
+      retention_enabled: true
+      delete_request_store: filesystem
+    analytics:
+      reporting_enabled: false   # nothing leaves the home
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: loki
+  namespace: logging
+spec:
+  replicas: 1
+  serviceName: loki
+  selector:
+    matchLabels: {app: loki}
+  template:
+    metadata:
+      labels: {app: loki}
+    spec:
+      securityContext: {runAsUser: 10001, fsGroup: 10001}
+      initContainers:
+        - name: own-data
+          image: busybox:1.37
+          command: [sh, -c, "chown -R 10001:10001 /loki"]
+          securityContext: {runAsUser: 0}
+          volumeMounts:
+            - {name: data, mountPath: /loki}
+      containers:
+        - name: loki
+          image: grafana/loki:3.3.2
+          args: [-config.file=/etc/loki/loki.yaml]
+          ports:
+            - {name: http, containerPort: 3100}
+          readinessProbe:
+            httpGet: {path: /ready, port: http}
+          volumeMounts:
+            - {name: config, mountPath: /etc/loki}
+            - {name: data, mountPath: /loki}
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {cpu: 300m, memory: 256Mi}
+      volumes:
+        - name: config
+          configMap: {name: loki}
+        - name: data
+          hostPath: {path: /sweg9-data/loki, type: DirectoryOrCreate}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: loki
+  namespace: logging
+spec:
+  selector: {app: loki}
+  ports:
+    - {name: http, port: 3100, targetPort: http}

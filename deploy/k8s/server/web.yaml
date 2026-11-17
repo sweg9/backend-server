@@ -1,0 +1,33 @@
+# The web app (live-demo build served by nginx). Not in kustomization.yaml until the image exists.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: sweg9
+  labels: {app: web}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: web}
+  template:
+    metadata:
+      labels: {app: web}
+    spec:
+      containers:
+        - name: web
+          image: sweg9/live-demo:dev
+          imagePullPolicy: Never
+          ports:
+            - {name: http, containerPort: 80}
+          resources:
+            limits: {cpu: 100m, memory: 64Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: sweg9
+spec:
+  selector: {app: web}
+  ports:
+    - {name: http, port: 80, targetPort: http}

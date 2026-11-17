@@ -1,6 +1,6 @@
 """Hub messages: the envelope and every payload (wiki: API > Hub messages).
 
-The hub and the cloud talk only through these models (wiki: Modules, import rules).
+The hub and the server talk only through these models (wiki: Modules, import rules).
 """
 
 from datetime import datetime
