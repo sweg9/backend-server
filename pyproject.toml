@@ -1,7 +1,7 @@
 [project]
 name = "backend-server"
 version = "0.1.0"
-description = "sweg9 backend in two modes: hub and server, both on the laptop at home (the server on k8s). FR-02 to FR-07, FR-10 to FR-12"
+description = "sweg9 backend in two modes: hub and server, both on the laptop at home (the server on k8s). FR-01 to FR-12, with ai-engine for the model steps"
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "pydantic>=2.7",

@@ -1,6 +1,6 @@
 # backend-server
 
-The sweg9 backend in two run modes from one repository (FR-02 to FR-07, FR-10 to FR-12). Both run on the laptop at home; nothing leaves the home.
+The sweg9 backend in two run modes from one repository (FR-01 to FR-12; the model steps of FR-01, FR-02, FR-08 and FR-09 are calls into `ai-engine`). Both run on the laptop at home; nothing leaves the home.
 
 | Mode | Runs as | Does |
 |---|---|---|
