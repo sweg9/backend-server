@@ -8,9 +8,7 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --extra server --no-dev --no-install-project
 COPY src ./src
-COPY migrations ./migrations
-COPY alembic.ini ./
-COPY settings ./settings
+COPY settings/server.yaml ./settings/server.yaml
 RUN uv sync --frozen --extra server --no-dev
 
 RUN useradd --uid 10001 --no-create-home app && mkdir -p /app/data && chown app /app/data

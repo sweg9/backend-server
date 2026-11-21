@@ -25,36 +25,45 @@ class Actuator(Strict):
 
 
 class HubSettings(Strict):
+    """settings/hub.yaml: the hub keeps the records and runs the runs (wiki: Stack)."""
+
     server_url: str
+    kms_key_id: str | None  # C-05
     hand: HandOption
     serial_port: str | None
     camera_index: int
-    data_dir: str
+    photo_max_side: int
     log_file: str
     log_max_mb: int
     log_keep_files: int
     spots: dict[str, str]  # spot_id -> room
     actuators: list[Actuator]
-    heartbeat_s: float
-    channel_timeout_s: float  # FR-07
-    effect_wait_s: float  # FR-08
-    unsure_recheck_s: float  # FR-08
-    max_press_tries: int  # FR-11
-    watch_interval_s: float  # FR-04 uses
-    watch_quiet_s: float
-    outbox_max_age_days: int
-
-
-class ServerSettings(Strict):
+    # the records
     database_url: str
     crop_dir: str
     backup_dir: str
     backup_keep_days: int
+    backup_at: str
     time_zone: str
-    single_worker: bool
-    confidence_high: float  # FR-06
-    confidence_low: float
+    session_days: int
+    uses_keep_days: int
+    crops_unreferenced_keep_days: int
+    # time limits for the server's answers (wiki: Hub messages)
+    heartbeat_s: float
+    recognize_timeout_s: float
+    check_timeout_s: float
+    refind_timeout_s: float
+    people_timeout_s: float  # FR-10
+    decide_timeout_s: float  # FR-05
+    # runs
     duplicate_trigger_s: float  # FR-05
+    channel_timeout_s: float  # FR-07
+    effect_wait_s: float  # FR-08
+    unsure_recheck_s: float  # FR-08
+    max_press_tries: int  # FR-11
+    # habits and learning
+    watch_interval_s: float  # FR-04 uses
+    watch_quiet_s: float
     habit_window_min: int  # FR-04
     habit_min_days: int
     habit_lookback_days: int
@@ -66,19 +75,26 @@ class ServerSettings(Strict):
     link_confidence_step: float  # FR-12
     stale_below: float
     fingerprint_same_control: float  # FR-01
+
+
+class ServerSettings(Strict):
+    """settings/server.yaml: the server on AWS relays and keeps no records."""
+
+    enclave_cid: int
+    enclave_port: int
+    s3_bucket: str | None
     hub_offline_after_missed: int
-    ack_batch_ms: int
-    scan_start_ack_s: float
-    stop_ack_s: float
-    session_days: int
+    app_timeout_s: float
+    stop_timeout_s: float
     login_max_failures: int
     login_window_s: float
-    hub_messages_keep_days: int
-    uses_keep_days: int
-    crops_unreferenced_keep_days: int
 
 
 class RiskSettings(Strict):
+    """settings/risk.yaml: the autonomy policy, passed to the enclave (FR-06)."""
+
+    confidence_high: float = 0.8
+    confidence_low: float = 0.5
     risk: dict[DeviceType, Risk]  # types not listed, and `other`, are high (wiki: Hub messages)
 
 

@@ -1,117 +1,90 @@
-"""The hub messages of the wiki parse, and the rules in their tables hold."""
+"""The hub messages of the wiki (contract version 2) parse, and the rules in their tables hold."""
 
 from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
 
-from backend.common.messages import Envelope, RunResultMsg, RunStart
-from tests.conftest import FP, crop
+from backend.common.messages import ANSWERS, PAYLOADS, RUN_TYPES, Check, Envelope, Gang, RefindResult
+from tests.conftest import FP, sealed
+
+BOX = [0.42, 0.31, 0.51, 0.44]
+DEVICE_BOX = [0.70, 0.10, 0.88, 0.45]
 
 EXAMPLES = {
-    "scan.start": {"scan_id": "sc-0003", "spot_id": "living_wall_1", "scan_s": 10, "watch_s": 120},
-    "control.found": {
-        "scan_id": "sc-0003",
-        "local_id": "c1",
-        "kind": "switch",
-        "score": 0.91,
-        "state": "off",
-        "state_confidence": 0.93,
-        "box": [0.42, 0.31, 0.51, 0.44],
-        "panel_point": [0.12, 0.40],
-        "fingerprint": FP,
-        "crop": crop("cr-h-0121"),
-        "spot_id": "living_wall_1",
-    },
-    "scan.done": {"scan_id": "sc-0003", "found": 3, "skipped": 1, "reason": None},
-    "mapping.candidate": {
-        "scan_id": "sc-0003",
-        "local_id": "c1",
-        "method": "watch",
-        "control_state": {"before": "off", "after": "on"},
-        "device_box": [0.70, 0.10, 0.88, 0.45],
-        "before": crop("cr-h-0130"),
-        "after": crop("cr-h-0131"),
-        "change_score": 0.64,
-        "device_type": "light",
-        "device_score": 0.88,
-        "spot_id": "living_wall_1",
-        "room": "living_room",
-    },
-    "watch.set": {
-        "enabled": True,
+    "recognize": {"purpose": "scan", "spot_id": "living_wall_1", "room": "living_room", "photo": sealed()},
+    "recognize.result": {
         "controls": [
             {
-                "control_id": "ctl-0005",
                 "kind": "switch",
-                "fingerprint": FP,
-                "seen_spot_id": "living_wall_1",
-                "box": [0.42, 0.31, 0.51, 0.44],
+                "box": BOX,
+                "score": 0.91,
+                "clear": True,
+                "state": "off",
+                "state_confidence": 0.93,
+                "gang": {"count": 2, "index": 1},
+                "link_guess": {"device_class": "ceiling_light", "p": 0.74},
+                "control_id": None,
             }
         ],
+        "person": False,
     },
-    "control.used": {
-        "control_id": "ctl-0005",
-        "before": "off",
-        "after": "on",
-        "at": "2026-11-17T12:04:58.000Z",
-        "confidence": 0.91,
-    },
-    "run.start": {
-        "mapping_id": "mp-0002",
-        "device": {"device_id": "dev_lamp_01", "name": "lamp", "risk": "low"},
+    "check": {
+        "purpose": "verify",
+        "before": [sealed("ph-h-0130")],
+        "after": [sealed("ph-h-0131")],
+        "device_box": DEVICE_BOX,
+        "device_type": "light",
         "action": "on",
-        "decision": "act",
-        "control": {
-            "control_id": "ctl-0005",
-            "kind": "switch",
-            "fingerprint": FP,
-            "panel_point": [0.12, 0.40],
-            "press_spot_id": "living_wall_1",
-        },
-        "check": {"device_box": [0.70, 0.10, 0.88, 0.45], "spot_id": "living_wall_1", "device_type": "light"},
-        "channels": [],
     },
-    "run.progress": {
-        "stage": "S6",
-        "step": "gate",
-        "status": "ok",
-        "channel": "ARM",
-        "detail": None,
-        "latency_ms": 420,
+    "check.result": {
+        "change": "off_to_on",
+        "answer": "yes",
+        "device_box": DEVICE_BOX,
+        "device_type": "light",
+        "confidence": 0.86,
+        "reason": "the lamp region got brighter",
     },
-    "run.result": {
-        "result": "success",
-        "reason": None,
-        "channel": "ARM",
-        "checks": {"main": "yes", "second": None, "disagree": False},
-        "stages": [
-            {"stage": "S5", "status": "skipped", "latency_ms": 3, "reason": "no wireless channel"},
-            {"stage": "S6", "status": "ok", "latency_ms": 6400, "reason": None},
-        ],
-        "attempts": [{"channel": "ARM", "latency_ms": 6400, "answer": "yes", "gate": "pass"}],
-        "press_spot_id": "living_wall_1",
-        "last_crop_id": None,
+    "refind": {
+        "photo": sealed("ph-h-0140"),
+        "control": {"control_id": "ctl-0005", "kind": "switch", "box": BOX, "fingerprint": None},
+        "actuators": [{"id": "A1", "faces": [0.0, 0.0, 0.5, 1.0]}],
     },
+    "refind.result": {
+        "found": True,
+        "box": BOX,
+        "plan": {"actuator": "A1", "push_ms": 600},
+        "confidence": 0.9,
+        "reason": "switch found near its saved place",
+    },
+    "people": {"photo": sealed("ph-h-0141"), "work_area": [0.0, 0.0, 0.5, 1.0]},
+    "people.result": {"clear": True, "confidence": 0.97, "reason": "no person in the work area"},
+    "decide": {
+        "trigger": "time",
+        "device": {"type": "light", "risk": "low"},
+        "action": "off",
+        "mapping": {"status": "Verified", "confidence": 0.92},
+        "routine": {"independence": "act_and_tell", "accept_share": 0.9},
+        "confidence": 0.9,
+    },
+    "decide.result": {"decision": "act", "confidence": 0.9, "reason": "low risk and high confidence"},
+    "app.request": {"method": "GET", "path": "/controls", "query": {}, "body": None, "session": "s3cr3t"},
+    "app.response": {"status": 200, "body": {"items": []}},
+    "app.event": {"kind": "run.progress", "data": {"stage": "S6", "step": "press", "status": "ok"}},
     "stop": {"source": "app"},
-    "hub.status": {
-        "camera": "ok",
-        "ral": {"impl": "script", "state": "idle"},
-        "run_id": None,
-        "queued": 0,
-        "watching": 1,
-    },
-    "ack": {"ids": ["m-h-000412"]},
+    "stop.done": {"ral": "stopped"},
+    "hub.status": {"camera": "ok", "ral": {"impl": "script", "state": "idle"}, "run_id": None, "watching": 1},
 }
-RUN_TYPES = {"run.start", "run.progress", "run.result"}
 
 
 def envelope(type_, payload, run_id="r-0007"):
+    answer = type_ in ANSWERS.values()
     return Envelope(
         type=type_,
         id="m-1",
+        re="m-0" if answer else None,
         run_id=run_id if type_ in RUN_TYPES else None,
-        sent_at=datetime(2026, 11, 17, tzinfo=UTC),
+        sent_at=datetime(2026, 11, 20, tzinfo=UTC),
         payload=payload,
     )
 
@@ -122,9 +95,11 @@ def test_wiki_examples_parse(type_):
 
 
 def test_every_message_type_has_an_example():
-    from backend.common.messages import PAYLOADS
-
     assert set(PAYLOADS) == set(EXAMPLES)
+
+
+def test_every_request_has_an_answer_type():
+    assert set(ANSWERS.values()) <= set(PAYLOADS)
 
 
 def test_unknown_type_is_rejected():
@@ -132,29 +107,61 @@ def test_unknown_type_is_rejected():
         envelope("run.maybe", {})
 
 
-def test_run_messages_need_run_id():
+def test_answers_need_re_and_requests_have_none():
     with pytest.raises(ValidationError):
-        Envelope(type="run.progress", id="m-1", run_id=None, sent_at=datetime.now(UTC), payload={})
-
-
-@pytest.mark.fr("FR-07")
-def test_arm_is_never_listed_in_run_start():
-    bad = dict(EXAMPLES["run.start"], channels=[{"channel": "ARM", "success_score": 0.9, "latency_ms": 10}])
+        Envelope(type="decide.result", id="m-1", run_id=None, sent_at=datetime.now(UTC), payload={})
     with pytest.raises(ValidationError):
-        RunStart.model_validate(bad)
+        Envelope(type="recognize", id="m-1", re="m-0", run_id=None, sent_at=datetime.now(UTC), payload={})
 
 
-@pytest.mark.fr("FR-12")
-def test_run_result_needs_a_reason_unless_success():
-    bad = dict(EXAMPLES["run.result"], result="cancelled", reason=None)
+def test_run_requests_need_run_id():
     with pytest.raises(ValidationError):
-        RunResultMsg.model_validate(bad)
+        Envelope(type="decide", id="m-1", run_id=None, sent_at=datetime.now(UTC), payload={})
 
 
-def test_crop_longest_side_at_most_256():
-    bad = dict(EXAMPLES["control.found"], crop=dict(crop(), w=512))
+@pytest.mark.fr("FR-08")
+def test_a_verify_check_names_the_device():
+    bad = dict(EXAMPLES["check"], device_box=None)
     with pytest.raises(ValidationError):
-        envelope("control.found", bad).body()
+        Check.model_validate(bad)
+
+
+@pytest.mark.fr("FR-09")
+def test_a_control_not_found_has_no_plan():
+    bad = dict(EXAMPLES["refind.result"], found=False)
+    with pytest.raises(ValidationError):
+        RefindResult.model_validate(bad)
+
+
+def test_a_watch_request_lists_the_known_controls():
+    bad = dict(EXAMPLES["recognize"], purpose="watch")
+    with pytest.raises(ValidationError):
+        envelope("recognize", bad).body()
+
+
+def test_gang_index_within_the_count():
+    with pytest.raises(ValidationError):
+        Gang(count=2, index=3)
+
+
+def test_answers_need_a_reason():
+    bad = dict(EXAMPLES["people.result"], reason="")
+    with pytest.raises(ValidationError):
+        envelope("people.result", bad).body()
+
+
+def test_photo_longest_side_at_most_1280():
+    bad = dict(EXAMPLES["people"], photo=dict(sealed(), w=4000))
+    with pytest.raises(ValidationError):
+        envelope("people", bad).body()
+
+
+def test_fingerprint_has_384_numbers():
+    ok = dict(EXAMPLES["refind"]["control"], fingerprint=FP)
+    bad = dict(EXAMPLES["refind"]["control"], fingerprint=FP[:10])
+    envelope("refind", dict(EXAMPLES["refind"], control=ok)).body()
+    with pytest.raises(ValidationError):
+        envelope("refind", dict(EXAMPLES["refind"], control=bad)).body()
 
 
 def test_extra_fields_are_rejected():

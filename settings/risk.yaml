@@ -1,4 +1,7 @@
-# Risk sorting of device types (FR-06, C-12). Types not listed, and `other`, are high.
+# The autonomy policy (FR-06, C-03, C-12), passed to the Nitro Enclave when it starts.
+# Types not listed, and `other`, are high.
+confidence_high: 0.8
+confidence_low: 0.5
 risk:
   light: low
   fan: low

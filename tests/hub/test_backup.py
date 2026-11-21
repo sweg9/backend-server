@@ -3,7 +3,7 @@
 import sqlite3
 from datetime import date
 
-from backend.server.backup import run_backup
+from backend.hub.backup import run_backup
 
 
 def test_backup_copies_db_and_crops_and_prunes(tmp_path):

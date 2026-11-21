@@ -1,5 +1,4 @@
-"""Watches the controls of watch.set at the current spot between scans and runs and sends
-control.used (FR-04).
+"""Watches the controls with a Verified mapping at the current spot between scans and runs: one
+`recognize` with purpose watch every `watch_interval_s`, and a row in `uses` for each flip (FR-04).
 
-Not built yet.
-"""
+Not built yet."""

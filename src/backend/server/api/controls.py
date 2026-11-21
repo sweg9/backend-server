@@ -1,13 +1,13 @@
 """Routes of the Controls tag of openapi/backend-server.yaml."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 
-from backend.server.api.common import not_built
+from backend.server.api.common import relay
 
 router = APIRouter(tags=["Controls"])
 
 
 @router.get("/controls")
-def list_controls():
-    """FR-01"""
-    raise not_built("GET /controls")
+async def list_controls(request: Request):
+    """FR-01. Relayed to the hub."""
+    return await relay(request)

@@ -1,5 +1,6 @@
 FP = [0.0] * 383 + [1.0]  # a valid 384-number fingerprint
 
 
-def crop(cid="cr-h-0001"):
-    return {"crop_id": cid, "jpeg_b64": "/9j/4AAQ", "w": 180, "h": 256}
+def sealed(pid="ph-h-0001"):
+    """A sealed photo as the hub sends it (wiki: Hub messages > Sealed photos)."""
+    return {"photo_id": pid, "key": "AQID", "nonce": "BAUG", "data": "BwgJ", "w": 1280, "h": 960}

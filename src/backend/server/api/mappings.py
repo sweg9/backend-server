@@ -1,25 +1,25 @@
 """Routes of the Mappings tag of openapi/backend-server.yaml."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 
-from backend.server.api.common import not_built
+from backend.server.api.common import relay
 
 router = APIRouter(tags=["Mappings"])
 
 
 @router.get("/mappings")
-def list_mappings():
-    """FR-02"""
-    raise not_built("GET /mappings")
+async def list_mappings(request: Request):
+    """FR-02. Relayed to the hub."""
+    return await relay(request)
 
 
 @router.post("/mappings/{mapping_id}/confirm")
-def confirm_mapping(mapping_id: str):
-    """FR-02"""
-    raise not_built("POST /mappings/{mapping_id}/confirm")
+async def confirm_mapping(request: Request, mapping_id: str):
+    """FR-02. Relayed to the hub."""
+    return await relay(request)
 
 
 @router.post("/mappings/{mapping_id}/reject")
-def reject_mapping(mapping_id: str):
-    """FR-02"""
-    raise not_built("POST /mappings/{mapping_id}/reject")
+async def reject_mapping(request: Request, mapping_id: str):
+    """FR-02. Relayed to the hub."""
+    return await relay(request)

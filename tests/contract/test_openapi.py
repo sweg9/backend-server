@@ -25,8 +25,8 @@ def test_routes_match_the_spec():
 
 
 def test_errors_use_the_one_shape():
-    r = TestClient(create_app()).get("/controls")
-    assert r.status_code == 501
+    r = TestClient(create_app()).get("/controls")  # no hub connected
+    assert r.status_code == 503
     assert set(r.json()) == {"code", "message", "reason"}
 
 

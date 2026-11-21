@@ -1,6 +1,6 @@
-"""Daily backup of the server's data (wiki: Stack > Backups). Run by the `backup` CronJob.
+"""Daily backup of the hub's data, at home (wiki: Stack > Backups). Run by the hub at `backup_at`, or `backend backup`.
 
-sqlite3's backup API gives a consistent copy while the server keeps writing in WAL mode.
+sqlite3's backup API gives a consistent copy while the hub keeps writing in WAL mode.
 The crops are copied next to it. Backups older than `backup_keep_days` are deleted.
 """
 

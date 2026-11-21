@@ -20,16 +20,19 @@ The design is on the wiki: [Stack](https://sweg9.github.io/docs/overview/stack),
 
 ## Status
 
-A skeleton. Built and tested: the shared names (`common/vocab.py`), every hub message (`common/messages.py`), the run entry with rules L-04, L-05 and L-09 (`common/runlog.py`), the settings files, JSON logs (`common/logs.py`), the database tables and the first migration, the daily backup, the hub's outbox, the channel adapter and RAL interfaces with the `stub` and `script` implementations, and every API route of the spec (each answers `501` until it is built). Every other module has a docstring that says what it will do.
+A skeleton of the 2026-11-20 split ([Modules](https://sweg9.github.io/docs/overview/modules)). Built and tested:
 
-The Dockerfile and the Kubernetes manifests in `deploy/` have not been run yet.
+- **common:** the shared names (`vocab.py`), every hub message of contract version 2 (`messages.py`), the run entry with rules L-04, L-05 and L-09 (`runlog.py`), the settings files, JSON logs (`logs.py`).
+- **hub:** the database tables and their migrations, the daily backup, the channel adapter and RAL interfaces with the `stub` and `script` implementations.
+- **server:** every API route of the spec, relayed to the hub (`503` while the hub is offline), the login limit, the emergency stop that waits for `stop.done`, and the hub's WebSocket, which hands the hub's requests to the enclave.
+- **enclave:** the autonomy policy (`decide`, FR-06).
 
-The code still follows the 2026-11-17 split, where the server kept the database and the hub ran the models on one laptop. It moves to the new split as it is built. The target layout is on the wiki ([Modules](https://sweg9.github.io/docs/overview/modules)), and `deploy/` and `settings/` already describe the target.
+Every other module has a docstring that says what it will do: the hub's scan, runs and app handlers, sealing photos, the vsock link and the enclave program. The Dockerfile and the Kubernetes manifests in `deploy/` have not been run yet.
 
 ## Run
 
 ```bash
-uv sync --extra server                     # Python 3.11; add --extra hub for the hub
+uv sync --extra server --extra hub        # Python 3.11
 uv run pytest                              # tests, including the import rules
 uv run ruff check . && uv run ruff format --check .
 uv run backend hash-password               # prints the value for APP_PASSWORD_HASH
@@ -47,14 +50,15 @@ The API and the hub's WebSocket are at `https://<domain>/api`, and Grafana at `h
 
 | Path | Content |
 |---|---|
-| `src/backend/common/` | Used by both modes: names, hub messages, run entry, settings, ids, logs |
-| `src/backend/hub/` | Hub mode. Never imports `server` |
-| `src/backend/server/` | Server mode. Never imports `hub` or `ai_engine` |
+| `src/backend/common/` | Used by every mode: names, hub messages, run entry, settings, ids, logs |
+| `src/backend/hub/` | Hub mode, at home: the database, the runs, the hardware. Never imports `server`, `enclave` or `ai_engine` |
+| `src/backend/server/` | Server mode, on AWS: the relay. Never imports `hub`, `enclave` or `ai_engine` |
+| `src/backend/enclave/` | Enclave mode, in the Nitro Enclave: the models through `ai_engine` and the autonomy policy. Never imports `hub` or `server` |
 | `settings/` | `hub.yaml`, `server.yaml`, `risk.yaml`: every starting value (C-12). No secrets (C-10). On the cluster, a ConfigMap |
 | `openapi/backend-server.yaml` | The API spec. This repo owns it; copy it to the wiki's `public/api/` when it changes. A test checks that the routes match it |
-| `migrations/` | Alembic. Change a table only through a new migration |
+| `migrations/` | Alembic, for the hub's database. Change a table only through a new migration |
 | `Dockerfile`, `deploy/` | The server image, the manifests (`kubectl apply -k deploy/k8s`), and how to set up the EC2 instance (`deploy/README.md`) |
-| `tests/` | `common/`, `hub/`, `server/`, `contract/`. Mark each test with the requirement it serves: `@pytest.mark.fr("FR-07")` (C-01) |
+| `tests/` | `common/`, `hub/`, `server/`, `enclave/`, `contract/`. Mark each test with the requirement it serves: `@pytest.mark.fr("FR-07")` (C-01) |
 
 Secrets come from the environment and Kubernetes Secrets only: `HUB_TOKEN`, `APP_PASSWORD_HASH` (the hub), `GRAFANA_ADMIN_PASSWORD`.
 

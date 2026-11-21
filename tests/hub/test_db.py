@@ -6,8 +6,8 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
-from backend.server.db.models import Base, Control, Crop, Device, Mapping, Run
-from backend.server.db.session import make_engine, make_sessionmaker
+from backend.hub.db.models import Base, Control, Crop, Device, Mapping, Run
+from backend.hub.db.session import make_engine, make_sessionmaker
 
 NOW = datetime(2026, 11, 17, 12, 0, tzinfo=UTC)
 

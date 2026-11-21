@@ -1,6 +1,8 @@
-"""Hub messages: the envelope and every payload (wiki: API > Hub messages).
+"""Hub messages, contract version 2: the envelope and every payload (wiki: API > Hub messages).
 
-The hub and the server talk only through these models (wiki: Modules, import rules).
+The hub keeps the records and runs the runs; the server relays its requests to the Nitro Enclave
+and the web app's calls to the hub. The hub, the server and the enclave talk only through these
+models (wiki: Modules, import rules).
 """
 
 from datetime import datetime
@@ -13,163 +15,243 @@ from backend.common.vocab import (
     CheckAnswer,
     ControlKind,
     ControlState,
+    Decision,
     DeviceAction,
     DeviceType,
     HandOption,
+    Independence,
+    MappingStatus,
     Risk,
-    RunResult,
     Stage,
+    Trigger,
 )
 
 Ratio = Annotated[float, Field(ge=0, le=1)]
 Box = tuple[Ratio, Ratio, Ratio, Ratio]
-Point = tuple[Ratio, Ratio]
 Fingerprint = Annotated[list[float], Field(min_length=384, max_length=384)]
-OnOff = Literal["on", "off"]
+Reason = Annotated[str, Field(min_length=1)]  # A-02: one short sentence from a fixed template
+MAX_PHOTO_SIDE = 1280
 
 
 class Msg(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
-class Crop(Msg):
-    crop_id: str
-    jpeg_b64: str
-    w: Annotated[int, Field(gt=0, le=256)]
-    h: Annotated[int, Field(gt=0, le=256)]
+class Sealed(Msg):
+    """One JPEG photo, encrypted by the hub with a KMS data key (C-05). Only the attested enclave opens it."""
+
+    photo_id: str
+    key: str  # the photo's data key, encrypted by KMS, base64
+    nonce: str  # AES-256-GCM nonce, base64
+    data: str  # the encrypted photo, base64
+    w: Annotated[int, Field(gt=0, le=MAX_PHOTO_SIDE)]
+    h: Annotated[int, Field(gt=0, le=MAX_PHOTO_SIDE)]
 
 
-# --- Setup: S1 and S2 -------------------------------------------------------
+class Answer(Msg):
+    """Every answer from the enclave has a confidence and a reason (A-02)."""
+
+    confidence: Ratio
+    reason: Reason
 
 
-class ScanStart(Msg):
-    scan_id: str
-    spot_id: str
-    scan_s: Annotated[int, Field(gt=0)]
-    watch_s: Annotated[int, Field(ge=0)]
+# --- Requests to the enclave -------------------------------------------------------------
 
 
-class ControlFound(Msg):
-    scan_id: str
-    local_id: str
+class KnownControl(Msg):
+    control_id: str
     kind: ControlKind
-    score: Ratio
-    state: ControlState
-    state_confidence: Ratio
     box: Box
-    panel_point: Point | None
-    fingerprint: Fingerprint
-    crop: Crop
-    spot_id: str
 
 
-class ScanDone(Msg):
-    scan_id: str
-    found: Annotated[int, Field(ge=0)]
-    skipped: Annotated[int, Field(ge=0)]
-    reason: str | None
-
-
-class StateChange(Msg):
-    before: ControlState
-    after: ControlState
-
-
-class MappingCandidate(Msg):
-    scan_id: str
-    local_id: str
-    method: Literal["watch", "test"]
-    control_state: StateChange
-    device_box: Box
-    before: Crop
-    after: Crop
-    change_score: Ratio
-    device_type: DeviceType | None
-    device_score: Ratio | None
+class Recognize(Msg):
+    purpose: Literal["scan", "watch"]
     spot_id: str
     room: str
-
-
-# --- Uses for habits: S3 -----------------------------------------------------
-
-
-class WatchedControl(Msg):
-    control_id: str
-    kind: ControlKind
-    fingerprint: Fingerprint
-    seen_spot_id: str
-    box: Box
-
-
-class WatchSet(Msg):
-    enabled: bool
-    controls: list[WatchedControl]
-
-
-class ControlUsed(Msg):
-    control_id: str
-    before: OnOff
-    after: OnOff
-    at: datetime
-    confidence: Ratio
-
-
-# --- Runtime: S4 to S7 -------------------------------------------------------
-
-
-class RunDevice(Msg):
-    device_id: str
-    name: str
-    risk: Risk
-
-
-class RunControl(Msg):
-    control_id: str
-    kind: ControlKind
-    fingerprint: Fingerprint
-    panel_point: Point | None
-    press_spot_id: str | None
-
-
-class RunCheck(Msg):
-    device_box: Box
-    spot_id: str
-    device_type: DeviceType
-
-
-class ChannelScore(Msg):
-    channel: Channel
-    success_score: Ratio
-    latency_ms: Annotated[int, Field(ge=0)]
+    photo: Sealed
+    known: list[KnownControl] | None = None
 
     @model_validator(mode="after")
-    def _no_arm(self):
-        if self.channel == Channel.ARM:
-            raise ValueError("ARM is never listed in run.start; it is always the last resort")
+    def _known_for_watch(self):
+        if self.purpose == "watch" and not self.known:
+            raise ValueError("a watch request lists the known controls to look for")
         return self
 
 
-class RunStart(Msg):
-    mapping_id: str
-    device: RunDevice
+class Gang(Msg):
+    count: Annotated[int, Field(ge=1)]
+    index: Annotated[int, Field(ge=1)]
+
+    @model_validator(mode="after")
+    def _index_in_count(self):
+        if self.index > self.count:
+            raise ValueError("the key index is larger than the gang count")
+        return self
+
+
+class LinkGuess(Msg):
+    device_class: str
+    p: Ratio
+
+
+class FoundControl(Msg):
+    kind: ControlKind
+    box: Box
+    score: Ratio
+    clear: bool
+    state: ControlState
+    state_confidence: Ratio
+    gang: Gang | None
+    link_guess: LinkGuess | None
+    control_id: str | None
+
+
+class RecognizeResult(Msg):
+    controls: list[FoundControl]
+    person: bool
+
+
+class Check(Msg):
+    purpose: Literal["map", "verify"]
+    before: Annotated[list[Sealed], Field(min_length=1, max_length=5)]
+    after: Annotated[list[Sealed], Field(min_length=1, max_length=5)]
+    device_box: Box | None
+    device_type: DeviceType | None
+    action: DeviceAction | None
+
+    @model_validator(mode="after")
+    def _verify_needs_the_device(self):
+        if self.purpose == "verify" and (self.device_box is None or self.device_type is None or self.action is None):
+            raise ValueError("a verify check names the device box, the device type and the action")
+        return self
+
+
+class CheckResult(Answer):
+    change: Literal["off_to_on", "on_to_off", "none"]
+    answer: CheckAnswer | None
+    device_box: Box | None
+    device_type: DeviceType | None
+
+
+class RefindControl(Msg):
+    control_id: str
+    kind: ControlKind
+    box: Box
+    fingerprint: Fingerprint | None
+
+
+class ActuatorFaces(Msg):
+    id: str
+    faces: Box
+
+
+class Refind(Msg):
+    photo: Sealed
+    control: RefindControl
+    actuators: Annotated[list[ActuatorFaces], Field(min_length=1)]
+
+
+class PressPlan(Msg):
+    actuator: str
+    push_ms: Annotated[int, Field(gt=0)]
+
+
+class RefindResult(Answer):
+    found: bool
+    box: Box | None
+    plan: PressPlan | None
+
+    @model_validator(mode="after")
+    def _plan_only_when_found(self):
+        if not self.found and (self.box is not None or self.plan is not None):
+            raise ValueError("a control that was not found has no box and no plan")
+        return self
+
+
+class People(Msg):
+    photo: Sealed
+    work_area: Box
+
+
+class PeopleResult(Answer):
+    clear: bool
+
+
+class DecideDevice(Msg):
+    type: DeviceType
+    risk: Risk
+
+
+class DecideMapping(Msg):
+    status: MappingStatus
+    confidence: Ratio
+
+
+class DecideRoutine(Msg):
+    independence: Independence
+    accept_share: Ratio
+
+
+class Decide(Msg):
+    trigger: Trigger
+    device: DecideDevice
     action: DeviceAction
-    decision: Literal["act", "ask"]
-    control: RunControl
-    check: RunCheck
-    channels: list[ChannelScore]
+    mapping: DecideMapping
+    routine: DecideRoutine | None
+    confidence: Ratio
 
 
-class RunProgress(Msg):
-    stage: Literal["S5", "S6"]
-    step: Literal["channel", "gate", "move", "press", "check"]
-    status: Literal["started", "ok", "fail", "unsure", "skipped"]
-    channel: Channel | None
-    detail: str | None
-    latency_ms: Annotated[int, Field(ge=0)] | None
+class DecideResult(Answer):
+    decision: Decision
+
+
+# --- Toward the app ------------------------------------------------------------------------
+
+
+class AppRequest(Msg):
+    method: Literal["GET", "POST", "PUT", "PATCH", "DELETE"]
+    path: str
+    query: dict[str, str] = {}
+    body: Any = None
+    session: str | None
+
+
+class AppResponse(Msg):
+    status: Annotated[int, Field(ge=100, le=599)]
+    body: Any = None
+    set_session: str | None = None  # the cookie to set; "" clears it (login and logout)
+
+
+class AppEvent(Msg):
+    kind: Literal["control", "mapping", "routine", "scan", "run.progress", "run.result", "notification"]
+    data: dict[str, Any]
+
+
+class Stop(Msg):
+    source: Literal["app"]  # the key on the hub and the power switch work without the server
+
+
+class StopDone(Msg):
+    ral: Literal["stopped", "error"]
+
+
+class RalStatus(Msg):
+    impl: HandOption
+    state: Literal["idle", "busy", "stopped", "error"]
+
+
+class HubStatus(Msg):
+    camera: Literal["ok", "down"]
+    ral: RalStatus
+    run_id: str | None
+    watching: Annotated[int, Field(ge=0)]
+
+
+# --- Parts of the run entry (execution-log.md), shared with runlog.py -------------------------
 
 
 class Checks(Msg):
-    source: Literal["platform", "camera"] | None = None  # set in the run entry (L-09), not in run.result
+    source: Literal["platform", "camera"] | None = None
     main: CheckAnswer | None
     second: Any = None  # a check answer or a small object such as {"room_brighter": "yes"}
     disagree: bool
@@ -190,70 +272,47 @@ class Attempt(Msg):
     gate: str | None = None
 
 
-class RunResultMsg(Msg):
-    result: RunResult
-    reason: str | None
-    channel: Channel | None
-    checks: Checks
-    stages: list[StageItem]
-    attempts: list[Attempt]
-    press_spot_id: str | None
-    last_crop_id: str | None
-
-    @model_validator(mode="after")
-    def _reason_unless_success(self):
-        if self.result != RunResult.SUCCESS and not self.reason:
-            raise ValueError("reason is required unless the result is success")
-        return self
-
-
-class Stop(Msg):
-    source: Literal["app", "key"]
-
-
-class RalStatus(Msg):
-    impl: HandOption
-    state: Literal["idle", "busy", "stopped", "error"]
-
-
-class HubStatus(Msg):
-    camera: Literal["ok", "down"]
-    ral: RalStatus
-    run_id: str | None
-    queued: Annotated[int, Field(ge=0)]
-    watching: Annotated[int, Field(ge=0)]
-
-
-class Ack(Msg):
-    ids: Annotated[list[str], Field(min_length=1)]
-
-
-# --- Envelope -----------------------------------------------------------------
+# --- Envelope -------------------------------------------------------------------------------
 
 PAYLOADS: dict[str, type[Msg]] = {
-    "scan.start": ScanStart,
-    "control.found": ControlFound,
-    "scan.done": ScanDone,
-    "mapping.candidate": MappingCandidate,
-    "watch.set": WatchSet,
-    "control.used": ControlUsed,
-    "run.start": RunStart,
-    "run.progress": RunProgress,
-    "run.result": RunResultMsg,
+    "recognize": Recognize,
+    "recognize.result": RecognizeResult,
+    "check": Check,
+    "check.result": CheckResult,
+    "refind": Refind,
+    "refind.result": RefindResult,
+    "people": People,
+    "people.result": PeopleResult,
+    "decide": Decide,
+    "decide.result": DecideResult,
+    "app.request": AppRequest,
+    "app.response": AppResponse,
+    "app.event": AppEvent,
     "stop": Stop,
+    "stop.done": StopDone,
     "hub.status": HubStatus,
-    "ack": Ack,
 }
 
-# Messages that change a record are confirmed with ack; only these wait in the hub's outbox.
-HUB_OUTBOX_TYPES = {"control.found", "scan.done", "mapping.candidate", "control.used", "run.result"}
-RUN_TYPES = {"run.start", "run.progress", "run.result"}
+# Requests the server hands to the enclave over vsock, unopened, and the answer each one gets.
+ENCLAVE_REQUESTS = {"recognize", "check", "refind", "people", "decide"}
+ANSWERS = {
+    "recognize": "recognize.result",
+    "check": "check.result",
+    "refind": "refind.result",
+    "people": "people.result",
+    "decide": "decide.result",
+    "app.request": "app.response",
+    "stop": "stop.done",
+}
+# Requests that belong to a run carry its run_id.
+RUN_TYPES = {"refind", "people", "decide"}
 
 
 class Envelope(Msg):
-    v: Literal[1] = 1
+    v: Literal[2] = 2
     type: str
     id: str
+    re: str | None = None
     run_id: str | None
     sent_at: datetime
     payload: dict[str, Any]
@@ -262,6 +321,11 @@ class Envelope(Msg):
     def _check(self):
         if self.type not in PAYLOADS:
             raise ValueError(f"unknown message type {self.type!r}")
+        is_answer = self.type in ANSWERS.values()
+        if is_answer and not self.re:
+            raise ValueError(f"{self.type} answers a request and needs re")
+        if not is_answer and self.re:
+            raise ValueError(f"{self.type} is not an answer and has no re")
         if self.type in RUN_TYPES and not self.run_id:
             raise ValueError(f"{self.type} belongs to a run and needs run_id")
         return self

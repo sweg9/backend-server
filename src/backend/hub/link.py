@@ -1,5 +1,5 @@
-"""WebSocket client to the server: connect with HUB_TOKEN, reconnect, hub.status, the outbox, and
-acks; handles stop before anything else (wiki: Hub messages).
+"""WebSocket client to the server: connects with HUB_TOKEN, reconnects, sends hub.status, sends the
+requests to the enclave with their time limits, and hands app.request to app.py. Handles stop before
+anything else (wiki: Hub messages).
 
-Not built yet.
-"""
+Not built yet."""

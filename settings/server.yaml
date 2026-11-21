@@ -1,35 +1,11 @@
-# Server mode (a pod on k3s on AWS EC2 since 2026-11-20). Starting values to be tuned (C-12).
-# The design keeps no database on the server. The keys below that belong to the records still follow the
-# 2026-11-17 split, because the code does; they move to hub.yaml as the code is built.
-# In k8s this file comes from a ConfigMap; paths are relative to the working directory /app.
-# Secrets are never here: APP_PASSWORD_HASH and HUB_TOKEN come from a k8s Secret (C-10).
-database_url: sqlite:///data/server/app.db
-crop_dir: data/server/crops
-backup_dir: data/backups
-backup_keep_days: 7
-time_zone: Asia/Seoul
-single_worker: true          # SQLite, the scheduler and the hub's WebSocket live in one process
-confidence_high: 0.8         # FR-06
-confidence_low: 0.5
-duplicate_trigger_s: 10      # FR-05
-habit_window_min: 30         # FR-04
-habit_min_days: 3
-habit_lookback_days: 14
-habit_run_at: "04:00"        # local time
-habit_independence: ask_first
-habit_removed_block_days: 30
-demote_after_rejections: 3   # FR-04
-channel_newest_weight: 0.3   # FR-12
-link_confidence_step: 0.05   # FR-12
-stale_below: 0.2
-fingerprint_same_control: 0.9  # FR-01 duplicate check; to be measured
-hub_offline_after_missed: 3
-ack_batch_ms: 200
-scan_start_ack_s: 5
-stop_ack_s: 2
-session_days: 30
-login_max_failures: 5
+# Server mode (a pod on k3s on AWS EC2): a relay that keeps no records (wiki: Stack). Starting values to be
+# tuned (C-12). In k8s this file comes from a ConfigMap. Secrets are never here: HUB_TOKEN comes from a k8s
+# Secret (C-10).
+enclave_cid: 16              # the Nitro Enclave, over vsock
+enclave_port: 5000
+s3_bucket: null              # sealed photos and model files; set when the AWS account is ready
+hub_offline_after_missed: 3  # heartbeats
+app_timeout_s: 5             # the hub's answer to a relayed call; then 503
+stop_timeout_s: 2            # without stop.done, the app tells the resident to use the key on the hub
+login_max_failures: 5        # Sign-in: then 429 for login_window_s
 login_window_s: 60
-hub_messages_keep_days: 7
-uses_keep_days: 60
-crops_unreferenced_keep_days: 30

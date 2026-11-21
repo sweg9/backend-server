@@ -1,4 +1,4 @@
-"""The server's tables (wiki: Overview > Database). Alembic migrations are made from these models."""
+"""The hub's tables, at home (wiki: Overview > Database). Alembic migrations are made from these models."""
 
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -99,7 +99,8 @@ class Control(Base):
     state_confidence: Mapped[float] = mapped_column(Float)
     actions: Mapped[list] = mapped_column(JSON)
     panel_point: Mapped[list | None] = mapped_column(JSON)
-    fingerprint: Mapped[bytes] = mapped_column(LargeBinary)  # 384 float32, little-endian
+    # 384 float32, little-endian; null until the enclave computes fingerprints
+    fingerprint: Mapped[bytes | None] = mapped_column(LargeBinary)
     crop_id: Mapped[str | None] = mapped_column(ForeignKey("crops.crop_id"))
     seen_spot_id: Mapped[str] = mapped_column(String)
     press_spot_id: Mapped[str | None] = mapped_column(String)
@@ -234,7 +235,7 @@ class OpenRun(Base):
         one_of("action", DeviceAction),
         one_of("decision", Decision),
         one_of("risk", Risk),
-        one_of("phase", ["waiting_answer", "sent", "running"]),
+        one_of("phase", ["waiting_answer", "running"]),
     )
     run_id: Mapped[str] = mapped_column(String, primary_key=True)
     trigger: Mapped[str] = mapped_column(String)
@@ -290,13 +291,6 @@ for ddl in APPEND_ONLY_TRIGGERS:
 
 
 # --- Other ------------------------------------------------------------------------------
-
-
-class HubMessage(Base):
-    __tablename__ = "hub_messages"
-    id: Mapped[str] = mapped_column(String, primary_key=True)
-    type: Mapped[str] = mapped_column(String)
-    received_at: Mapped[datetime] = mapped_column(UtcTime, index=True)
 
 
 class AppState(Base):

@@ -1,5 +1,4 @@
-"""Runs a scan: detect every fifth frame, read state, fingerprint, drop crops with a person, send
-control.found; then watch for flips and send mapping.candidate (FR-01, FR-02).
+"""Runs a scan: sends `recognize` for each photo, saves the clear controls (same control or new one),
+then watches for a flip and sends `check` with purpose map (FR-01, FR-02).
 
-Not built yet.
-"""
+Not built yet."""

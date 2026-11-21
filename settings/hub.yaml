@@ -1,10 +1,11 @@
-# Hub mode (a laptop at home). Starting values to be tuned (C-12).
-# Secrets are never here: HUB_TOKEN comes from the environment (C-10).
+# Hub mode (a laptop at home): the records, the runs and the hardware. Starting values to be tuned (C-12).
+# Secrets are never here: HUB_TOKEN, APP_PASSWORD_HASH and the AWS credentials come from the environment (C-10).
 server_url: wss://nova.example.com/api/ws/hub   # the server on AWS; the domain is still open
+kms_key_id: null             # the KMS key that seals photos (C-05); set when the AWS account is ready
 hand: script                 # linear_actuators | unity_sim | script (FR-11, C-13)
 serial_port: null            # for example /dev/tty.usbserial-0001 with linear_actuators
 camera_index: 0
-data_dir: data/hub           # outbox.jsonl; git-ignored
+photo_max_side: 1280         # longest side of a photo sent to the enclave
 log_file: data/hub/hub.log   # an Alloy on this laptop pushes it to Loki on AWS
 log_max_mb: 10
 log_keep_files: 5
@@ -13,11 +14,44 @@ spots:                       # spot_id -> room; the team member picks the names
 actuators:                   # which part of the image each actuator faces (FR-09)
   - {id: A1, faces: [0.0, 0.0, 0.5, 1.0]}
   - {id: A2, faces: [0.5, 0.0, 1.0, 1.0]}
+
+# The records (wiki: Database). Paths are relative to the working directory; data/ is git-ignored.
+database_url: sqlite:///data/hub/app.db
+crop_dir: data/hub/crops
+backup_dir: data/hub/backups
+backup_keep_days: 7
+backup_at: "03:00"           # local time
+time_zone: Asia/Seoul
+session_days: 30             # Sign-in
+uses_keep_days: 60
+crops_unreferenced_keep_days: 30
+
+# Time limits for the server's answers (wiki: Hub messages > Answers that do not come)
 heartbeat_s: 5
+recognize_timeout_s: 10
+check_timeout_s: 10
+refind_timeout_s: 10
+people_timeout_s: 3          # FR-10: no answer means no press
+decide_timeout_s: 5          # FR-05: no answer means only suggest
+
+# Runs
+duplicate_trigger_s: 10      # FR-05
 channel_timeout_s: 5         # FR-07
 effect_wait_s: 3             # FR-08
 unsure_recheck_s: 3          # FR-08
 max_press_tries: 2           # FR-11
-watch_interval_s: 2          # uses for habits
+
+# Habits and learning
+watch_interval_s: 2          # uses for habits; raise it first if the connection is slow (5th meeting)
 watch_quiet_s: 10
-outbox_max_age_days: 7
+habit_window_min: 30         # FR-04
+habit_min_days: 3
+habit_lookback_days: 14
+habit_run_at: "04:00"        # local time
+habit_independence: ask_first
+habit_removed_block_days: 30
+demote_after_rejections: 3   # FR-04
+channel_newest_weight: 0.3   # FR-12
+link_confidence_step: 0.05   # FR-12
+stale_below: 0.2
+fingerprint_same_control: 0.9  # FR-01 duplicate check; to be measured
