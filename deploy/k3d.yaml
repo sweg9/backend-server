@@ -1,4 +1,5 @@
-# One-node cluster on the laptop (wiki: Stack > Deployment on Kubernetes).
+# Local test cluster on a laptop, for the 2026-11-17 split.
+# The target since 2026-11-20 is k3s on AWS EC2 with a Nitro Enclave (wiki: Stack > Deployment on AWS).
 # Create with: k3d cluster create --config deploy/k3d.yaml
 apiVersion: k3d.io/v1alpha5
 kind: Simple

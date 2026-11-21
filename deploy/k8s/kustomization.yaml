@@ -1,4 +1,6 @@
 # kubectl apply -k deploy/k8s
+# These manifests follow the 2026-11-17 split (server with SQLite and a backup CronJob, hostPath data).
+# The target since 2026-11-20 is in the wiki (Stack > Deployment on AWS): no database on AWS and an `ml-engine` workload for the Nitro Enclave.
 # Made outside this folder by deploy/up.sh, never committed: the Secrets `app`, `grafana`
 # and the TLS secrets `sweg9-tls` (C-10), and the ConfigMap `server-settings` from settings/.
 apiVersion: kustomize.config.k8s.io/v1beta1

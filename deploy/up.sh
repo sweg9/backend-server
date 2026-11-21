@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Bring up the cluster on the laptop (wiki: Stack > Deployment on Kubernetes).
+# Bring up the local test cluster on a laptop (2026-11-17 split).
+# The target since 2026-11-20 is k3s on AWS EC2 with a Nitro Enclave (wiki: Stack > Deployment on AWS).
 # Needs: docker, k3d, kubectl, mkcert. Secrets come from the environment, never from git (C-10):
 #   HUB_TOKEN, APP_PASSWORD_HASH (from `uv run backend hash-password`), GRAFANA_ADMIN_PASSWORD
 set -euo pipefail

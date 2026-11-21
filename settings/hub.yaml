@@ -1,6 +1,6 @@
-# Hub mode (the laptop at home). Starting values to be tuned (C-12).
+# Hub mode (a laptop at home). Starting values to be tuned (C-12).
 # Secrets are never here: HUB_TOKEN comes from the environment (C-10).
-server_url: wss://sweg9.localhost/api/ws/hub   # through the k3d ingress
+server_url: wss://sweg9.localhost/api/ws/hub   # local k3d test cluster; on AWS, the server's domain (still open)
 hand: script                 # linear_actuators | unity_sim | script (FR-11, C-13)
 serial_port: null            # for example /dev/tty.usbserial-0001 with linear_actuators
 camera_index: 0
