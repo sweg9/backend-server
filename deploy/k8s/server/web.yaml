@@ -15,8 +15,7 @@ spec:
     spec:
       containers:
         - name: web
-          image: sweg9/live-demo:dev
-          imagePullPolicy: Never
+          image: ghcr.io/sweg9/live-demo:latest
           ports:
             - {name: http, containerPort: 80}
           resources:

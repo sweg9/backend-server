@@ -63,9 +63,9 @@ spec:
             - name: GF_SECURITY_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef: {name: grafana, key: GRAFANA_ADMIN_PASSWORD}
-            - {name: GF_ANALYTICS_REPORTING_ENABLED, value: "false"}   # nothing leaves the home
+            - {name: GF_ANALYTICS_REPORTING_ENABLED, value: "false"}
             - {name: GF_ANALYTICS_CHECK_FOR_UPDATES, value: "false"}
-            - {name: GF_SERVER_ROOT_URL, value: "https://grafana.sweg9.localhost"}
+            - {name: GF_SERVER_ROOT_URL, value: "https://grafana.nova.example.com"}   # the domain is still open
           readinessProbe:
             httpGet: {path: /api/health, port: http}
           volumeMounts:
@@ -97,10 +97,10 @@ metadata:
 spec:
   entryPoints: [websecure]
   routes:
-    - match: Host(`grafana.sweg9.localhost`)
+    - match: Host(`grafana.nova.example.com`)
       kind: Rule
       services:
         - name: grafana
           port: 3000
   tls:
-    secretName: sweg9-tls
+    secretName: nova-tls

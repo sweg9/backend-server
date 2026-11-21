@@ -1,11 +1,11 @@
 # Hub mode (a laptop at home). Starting values to be tuned (C-12).
 # Secrets are never here: HUB_TOKEN comes from the environment (C-10).
-server_url: wss://sweg9.localhost/api/ws/hub   # local k3d test cluster; on AWS, the server's domain (still open)
+server_url: wss://nova.example.com/api/ws/hub   # the server on AWS; the domain is still open
 hand: script                 # linear_actuators | unity_sim | script (FR-11, C-13)
 serial_port: null            # for example /dev/tty.usbserial-0001 with linear_actuators
 camera_index: 0
 data_dir: data/hub           # outbox.jsonl; git-ignored
-log_file: ~/sweg9-data/hub-logs/hub.log   # read by Alloy through the k3d node mount
+log_file: data/hub/hub.log   # an Alloy on this laptop pushes it to Loki on AWS
 log_max_mb: 10
 log_keep_files: 5
 spots:                       # spot_id -> room; the team member picks the names

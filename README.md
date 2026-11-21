@@ -7,12 +7,12 @@ Since the 2026-11-20 meeting the server runs on AWS and the hub at home:
 | Mode | Runs as | Does |
 |---|---|---|
 | `hub` | `uv run backend hub` on a laptop at home (it needs the USB webcam and the Arduino) | Reader (photos from the robot), the records in SQLite, Safety Guard, Dashboard (Streamlit), channel adapters, the hand through the RAL |
-| `server` | A pod on k3s on one AWS EC2 instance | The API for the web app and the hub, monitoring. No database |
+| `server` | A pod on k3s on one AWS EC2 instance | Relays the web app's calls to the hub and the hub's requests to the enclave, puts sealed photos in S3, monitoring. No database |
 
 The models (`ai-engine`: YOLO11n, Linker, MobileNet) and the autonomy policy run in a Nitro Enclave on the same EC2 instance, reached over vsock.
-- The hub encrypts every crop before it leaves the home.
-- Only the attested enclave can get the KMS key that decrypts it.
-- S3 keeps the crops encrypted.
+- No video leaves the home. The hub seals each single photo a step needs before it leaves the home.
+- Only the attested enclave can get the KMS key that opens it.
+- S3 keeps the photos sealed.
 
 Operational logs of both go to Loki and are searched in Grafana, on the cluster.
 
@@ -24,7 +24,7 @@ A skeleton. Built and tested: the shared names (`common/vocab.py`), every hub me
 
 The Dockerfile and the Kubernetes manifests in `deploy/` have not been run yet.
 
-The code and `deploy/` still follow the 2026-11-17 split, where the server kept the database and the hub ran the models on one laptop with k3d. They move to the new split as it is built; the target is on the wiki ([Stack](https://sweg9.github.io/docs/overview/stack#where-each-part-runs)).
+The code still follows the 2026-11-17 split, where the server kept the database and the hub ran the models on one laptop. It moves to the new split as it is built. The target layout is on the wiki ([Modules](https://sweg9.github.io/docs/overview/modules)), and `deploy/` and `settings/` already describe the target.
 
 ## Run
 
@@ -35,15 +35,13 @@ uv run ruff check . && uv run ruff format --check .
 uv run backend hash-password               # prints the value for APP_PASSWORD_HASH
 ```
 
-On the cluster (needs docker, k3d, kubectl and mkcert):
+On AWS: set up the EC2 instance as `deploy/README.md` says, then `kubectl apply -k deploy/k8s` there. The hub runs on the laptop at home:
 
 ```bash
-export HUB_TOKEN=... APP_PASSWORD_HASH=... GRAFANA_ADMIN_PASSWORD=...
-deploy/up.sh                               # cluster, image, secrets, TLS, manifests
-HUB_TOKEN=$HUB_TOKEN uv run backend hub    # the hub, outside the cluster
+HUB_TOKEN=... APP_PASSWORD_HASH=... uv run backend hub
 ```
 
-The API is at `https://sweg9.localhost/api` and Grafana at `https://grafana.sweg9.localhost`. Data, backups, Loki's files and the hub's logs are in `~/sweg9-data/`, outside the cluster.
+The API and the hub's WebSocket are at `https://<domain>/api`, and Grafana at `https://grafana.<domain>`; the domain is still open.
 
 ## Layout
 
@@ -55,10 +53,10 @@ The API is at `https://sweg9.localhost/api` and Grafana at `https://grafana.sweg
 | `settings/` | `hub.yaml`, `server.yaml`, `risk.yaml`: every starting value (C-12). No secrets (C-10). On the cluster, a ConfigMap |
 | `openapi/backend-server.yaml` | The API spec. This repo owns it; copy it to the wiki's `public/api/` when it changes. A test checks that the routes match it |
 | `migrations/` | Alembic. Change a table only through a new migration |
-| `Dockerfile`, `deploy/` | The server image, the k3d cluster, the manifests (`kubectl apply -k deploy/k8s`), `up.sh` |
+| `Dockerfile`, `deploy/` | The server image, the manifests (`kubectl apply -k deploy/k8s`), and how to set up the EC2 instance (`deploy/README.md`) |
 | `tests/` | `common/`, `hub/`, `server/`, `contract/`. Mark each test with the requirement it serves: `@pytest.mark.fr("FR-07")` (C-01) |
 
-Secrets come from the environment and Kubernetes Secrets only: `HUB_TOKEN`, `APP_PASSWORD_HASH`, `GRAFANA_ADMIN_PASSWORD`.
+Secrets come from the environment and Kubernetes Secrets only: `HUB_TOKEN`, `APP_PASSWORD_HASH` (the hub), `GRAFANA_ADMIN_PASSWORD`.
 
 ## Skills and standards
 

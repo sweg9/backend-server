@@ -1,4 +1,5 @@
-# Loki, single binary, files on the laptop, 14 days of logs (wiki: Stack > Logging).
+# Loki, single binary, files on the EC2 instance's EBS volume, 14 days of logs (wiki: Stack > Logging).
+# The hub at home pushes its log lines to /loki/api/v1/push through the ingress, behind basic auth.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -32,7 +33,7 @@ data:
       retention_enabled: true
       delete_request_store: filesystem
     analytics:
-      reporting_enabled: false   # nothing leaves the home
+      reporting_enabled: false
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -73,8 +74,12 @@ spec:
       volumes:
         - name: config
           configMap: {name: loki}
-        - name: data
-          hostPath: {path: /sweg9-data/loki, type: DirectoryOrCreate}
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: local-path   # k3s's default, on the instance's EBS volume
+        resources: {requests: {storage: 5Gi}}
 ---
 apiVersion: v1
 kind: Service
@@ -85,3 +90,31 @@ spec:
   selector: {app: loki}
   ports:
     - {name: http, port: 3100, targetPort: http}
+---
+# The hub's own Alloy pushes here. The Secret loki-push holds the htpasswd line (deploy/README.md).
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: loki-push-auth
+  namespace: logging
+spec:
+  basicAuth:
+    secret: loki-push
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: loki-push
+  namespace: logging
+spec:
+  entryPoints: [websecure]
+  routes:
+    - match: Host(`nova.example.com`) && Path(`/loki/api/v1/push`)
+      kind: Rule
+      middlewares:
+        - name: loki-push-auth
+      services:
+        - name: loki
+          port: 3100
+  tls:
+    secretName: nova-tls

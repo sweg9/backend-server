@@ -1,4 +1,5 @@
-# Grafana Alloy: the server pod's stdout and the hub's log files to Loki (wiki: Stack > Logging).
+# Grafana Alloy: the pods' stdout to Loki (wiki: Stack > Logging). The hub's log file is pushed by an
+# Alloy on the hub laptop, through the ingress (see loki.yaml).
 # Labels stay few: mode, level, module. run_id stays in the line and is searched with | json.
 apiVersion: v1
 kind: ServiceAccount
@@ -40,15 +41,6 @@ data:
       forward_to = [loki.process.json.receiver]
     }
 
-    local.file_match "hub" {
-      path_targets = [{"__path__" = "/sweg9-data/hub-logs/*.log"}]
-    }
-
-    loki.source.file "hub" {
-      targets    = local.file_match.hub.targets
-      forward_to = [loki.process.json.receiver]
-    }
-
     loki.process "json" {
       stage.json {
         expressions = {level = "level", mode = "mode", module = "module", ts = "ts"}
@@ -86,12 +78,9 @@ spec:
           args: [run, /etc/alloy/config.alloy, --storage.path=/var/lib/alloy, --disable-reporting]
           volumeMounts:
             - {name: config, mountPath: /etc/alloy}
-            - {name: hub-logs, mountPath: /sweg9-data/hub-logs, readOnly: true}
           resources:
             requests: {cpu: 20m, memory: 64Mi}
             limits: {cpu: 200m, memory: 192Mi}
       volumes:
         - name: config
           configMap: {name: alloy}
-        - name: hub-logs
-          hostPath: {path: /sweg9-data/hub-logs, type: DirectoryOrCreate}

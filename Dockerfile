@@ -1,4 +1,4 @@
-# The server image (wiki: Stack > Deployment on Kubernetes). No YOLO, no PyTorch: the hub runs outside k8s.
+# The server image (wiki: Stack > Deployment on AWS). No models: they run in the Nitro Enclave.
 FROM python:3.11-slim
 
 COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /usr/local/bin/uv

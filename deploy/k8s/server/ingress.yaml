@@ -1,5 +1,6 @@
-# One host for the app and the API, so the session cookie is same-origin (wiki: Stack > Sign-in).
-# Traefik is the ingress built into k3s. TLS from mkcert, in the Secret sweg9-tls.
+# One host for the app, the API and the hub's WebSocket, so the session cookie is same-origin
+# (wiki: Stack > Sign-in). Traefik is the ingress built into k3s. nova.example.com stands for the server's
+# domain, which is still open; the TLS certificate for it is in the Secret nova-tls.
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
@@ -17,17 +18,17 @@ metadata:
 spec:
   entryPoints: [websecure]
   routes:
-    - match: Host(`sweg9.localhost`) && PathPrefix(`/api`)   # API, /api/ws/app and /api/ws/hub
+    - match: Host(`nova.example.com`) && PathPrefix(`/api`)   # API, /api/ws/app and /api/ws/hub
       kind: Rule
       middlewares:
         - name: strip-api
       services:
         - name: server
           port: 8000
-    # - match: Host(`sweg9.localhost`)                         # the app, with server/web.yaml
+    # - match: Host(`nova.example.com`)                         # the app, with server/web.yaml
     #   kind: Rule
     #   services:
     #     - name: web
     #       port: 80
   tls:
-    secretName: sweg9-tls
+    secretName: nova-tls

@@ -1,0 +1,38 @@
+# Starts the Nitro Enclave with the ML Engine and the autonomy policy (wiki: Stack > Deployment on AWS).
+# Needs the Nitro Enclaves Kubernetes device plugin on the node (deploy/README.md). The enclave has no network:
+# the server reaches it over vsock (CID 16, port 5000), and this pod runs the vsock proxy the enclave uses for KMS.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ml-engine
+  namespace: sweg9
+  labels: {app: ml-engine}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}   # one enclave per instance
+  selector:
+    matchLabels: {app: ml-engine}
+  template:
+    metadata:
+      labels: {app: ml-engine}
+    spec:
+      containers:
+        - name: ml-engine
+          image: ghcr.io/sweg9/ml-engine:latest   # holds ml-engine.eif, built from ai-engine and backend-server/enclave
+          command: [sh, -c]
+          args:
+            - |
+              vsock-proxy 8000 kms.ap-northeast-2.amazonaws.com 443 &
+              nitro-cli run-enclave --eif-path /enclave/ml-engine.eif --cpu-count 2 --memory 4096 --enclave-cid 16
+              exec sleep infinity
+          volumeMounts:
+            - {name: risk, mountPath: /enclave/risk.yaml, subPath: risk.yaml}   # sent to the enclave over vsock at start
+          resources:
+            limits:
+              aws.ec2.nitro/nitro_enclaves: "1"
+              hugepages-2Mi: 4096Mi
+              memory: 256Mi
+              cpu: 250m
+      volumes:
+        - name: risk
+          configMap: {name: enclave-settings}
