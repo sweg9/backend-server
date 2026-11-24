@@ -49,6 +49,8 @@ uv run backend hub --stdout --server-url ws://127.0.0.1:8000/ws/hub
 
 The session cookie is `Secure` and `SameSite=Strict`, so the web app calls the server through its dev server's proxy (for Vite: `server.proxy` sends `/api` to `http://127.0.0.1:8000` and strips `/api`, like the ingress). Browsers accept `Secure` cookies on `http://localhost`.
 
+The same pair runs on a shared dev instance on AWS, kept stopped when unused: [`deploy/dev-ec2/`](deploy/dev-ec2/README.md).
+
 On AWS: set up the EC2 instance as `deploy/README.md` says, then `kubectl apply -k deploy/k8s` there. The hub runs on the laptop at home:
 
 ```bash
