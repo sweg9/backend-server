@@ -2,6 +2,7 @@
 
 import argparse
 import getpass
+import os
 import sys
 
 
@@ -16,7 +17,8 @@ def _hub(args) -> int:
     else:
         logs.setup("hub", s.log_file, s.log_max_mb, s.log_keep_files)
         print(f"hub logs go to {s.log_file}", file=sys.stderr)
-    return run(s, args.server_url)
+    demo = args.demo_scenarios or os.environ.get("DEMO_SCENARIOS") == "1"
+    return run(s, args.server_url, demo)
 
 
 def _seed_demo(args) -> int:
@@ -93,6 +95,11 @@ def main(argv: list[str] | None = None) -> int:
     h = sub.add_parser("hub", help="run on the laptop at home")
     h.add_argument("--server-url", help="instead of server_url in settings/hub.yaml, e.g. ws://127.0.0.1:8000/ws/hub")
     h.add_argument("--stdout", action="store_true", help="log to stdout instead of log_file (in a container)")
+    h.add_argument(
+        "--demo-scenarios",
+        action="store_true",
+        help="allow POST /scenarios/{name}/start (also DEMO_SCENARIOS=1); for development and the demo only",
+    )
     h.set_defaults(func=_hub)
     sub.add_parser("enclave", help="run inside the Nitro Enclave").set_defaults(func=_not_built("enclave mode"))
     c = sub.add_parser("server", help="run the server (a pod on k3s on AWS)")

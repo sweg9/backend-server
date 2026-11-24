@@ -21,6 +21,10 @@ class ScriptRal:
     async def release(self, actuator: str) -> None:
         self.calls.append(("release", actuator))
 
+    def reset(self) -> None:
+        """After an emergency stop, when the resident starts something new (the real hand needs a person)."""
+        self.stopped = False
+
     async def stop(self) -> None:
         self.stopped = True
         self.calls.append(("stop",))

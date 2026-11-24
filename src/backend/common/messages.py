@@ -223,7 +223,18 @@ class AppResponse(Msg):
 
 
 class AppEvent(Msg):
-    kind: Literal["control", "mapping", "routine", "scan", "run.progress", "run.result", "notification"]
+    kind: Literal[
+        "control",
+        "mapping",
+        "routine",
+        "scan",
+        "run.progress",
+        "run.result",
+        "notification",
+        "situation",  # a Situation of the API, on every change of its status or plan
+        "visits",  # {visits: Visit[]}, the robot's visit order
+        "robot",  # the Robot of the API, on every change of its state
+    ]
     data: dict[str, Any]
 
 

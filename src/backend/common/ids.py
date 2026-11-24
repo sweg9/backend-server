@@ -8,7 +8,7 @@ import time
 
 _ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"  # Crockford base32
 
-PREFIXES = {"ctl", "dev", "mp", "rt", "r", "sc", "cr", "use", "fb", "m"}
+PREFIXES = {"ctl", "dev", "mp", "rt", "r", "sc", "cr", "use", "fb", "m", "sit", "vis"}
 
 
 def ulid(now_ms: int | None = None) -> str:

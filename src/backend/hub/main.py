@@ -1,7 +1,8 @@
 """Starts the hub parts from settings/hub.yaml: the database, the RAL and the link to the server.
 
-Built so far: the records and the app's calls (app.py), the emergency stop through the RAL, and the
-link with its heartbeat. The scan, the triggers and the runs join here as they are built.
+Built so far: the records and the app's calls (app.py), the orchestrator with the emergency stop, the
+link with its heartbeat, and the demo scenarios as a trigger source (--demo-scenarios). The real
+answers (enclave, camera, gate), the scan and the time and sensor triggers join here as they are built.
 """
 
 import asyncio
@@ -14,10 +15,14 @@ from alembic.config import Config
 
 from backend.common.messages import HubStatus, RalStatus, StopDone
 from backend.common.settings import REPO, HubSettings
+from backend.common.vocab import Channel
 from backend.hub.app import AppHandlers
+from backend.hub.channels.stub import StubAdapter
 from backend.hub.db.session import make_engine, make_sessionmaker
 from backend.hub.link import HubLink
+from backend.hub.orchestrator import Orchestrator, SafeAnswers
 from backend.hub.ral import make_ral
+from backend.hub.runs import end_left_open
 
 log = logging.getLogger(__name__)
 
@@ -38,43 +43,58 @@ def migrate(database_url: str) -> None:
             os.environ["DATABASE_URL"] = old
 
 
-def build(s: HubSettings, server_url: str, hub_token: str, password_hash: str | None) -> HubLink:
+def build(
+    s: HubSettings, server_url: str, hub_token: str, password_hash: str | None, demo_scenarios: bool = False
+) -> HubLink:
     db = make_sessionmaker(make_engine(s.database_url))
+    with db() as session:
+        ended = end_left_open(session, s.time_zone)
+    if ended:
+        log.warning("ended %d runs left open by a restart", ended)
     ral = make_ral(s.hand)
-    state = {"ral": "idle"}
-
-    async def on_stop() -> StopDone:
-        try:
-            await ral.stop()
-            state["ral"] = "stopped"
-            return StopDone(ral="stopped")
-        except Exception:
-            log.exception("the RAL did not stop")
-            state["ral"] = "error"
-            return StopDone(ral="error")
-
-    def status() -> HubStatus:
-        # The Reader (camera.py) is not built yet, so the camera reads as down.
-        return HubStatus(camera="down", ral=RalStatus(impl=ral.impl, state=state["ral"]), run_id=None, watching=0)
 
     async def emit(kind: str, data: dict) -> None:
         await link.event(kind, data)
 
-    app = AppHandlers(db, s.session_days, password_hash, emit=emit)
+    orch = Orchestrator(
+        db,
+        ral,
+        {c: StubAdapter(c) for c in (Channel.IR, Channel.WIFI, Channel.BT)},
+        SafeAnswers(),
+        emit,
+        time_zone=s.time_zone,
+        effect_wait_s=s.effect_wait_s,
+        unsure_recheck_s=s.unsure_recheck_s,
+        actuator=s.actuators[0].id,
+    )
+
+    async def on_stop() -> StopDone:
+        return StopDone(ral=await orch.stop())
+
+    def status() -> HubStatus:
+        # The Reader (camera.py) is not built yet, so the camera reads as down.
+        run_id = (orch.robot.task or {}).get("run_id")
+        return HubStatus(
+            camera="down", ral=RalStatus(impl=ral.impl, state=orch.robot.ral_state), run_id=run_id, watching=0
+        )
+
+    app = AppHandlers(db, s.session_days, password_hash, emit=emit, orch=orch, demo_scenarios=demo_scenarios)
     link = HubLink(server_url, hub_token, app.handle, on_stop, status, heartbeat_s=s.heartbeat_s)
     return link
 
 
-async def serve(s: HubSettings, server_url: str, hub_token: str, password_hash: str | None) -> None:
+async def serve(
+    s: HubSettings, server_url: str, hub_token: str, password_hash: str | None, demo_scenarios: bool
+) -> None:
     migrate(s.database_url)
-    link = build(s, server_url, hub_token, password_hash)
+    link = build(s, server_url, hub_token, password_hash, demo_scenarios)
     try:
         await link.run_forever()
     finally:
         await link.close()
 
 
-def run(s: HubSettings, server_url: str | None = None) -> int:
+def run(s: HubSettings, server_url: str | None = None, demo_scenarios: bool = False) -> int:
     token = os.environ.get("HUB_TOKEN")
     password_hash = os.environ.get("APP_PASSWORD_HASH")
     if not token:
@@ -83,7 +103,9 @@ def run(s: HubSettings, server_url: str | None = None) -> int:
     if not password_hash:
         log.warning("APP_PASSWORD_HASH is not set: nobody can sign in (make one with `backend hash-password`)")
     try:
-        asyncio.run(serve(s, server_url or s.server_url, token, password_hash))
+        if demo_scenarios:
+            log.warning("demo scenarios are on: POST /scenarios/{name}/start plays fixed answers")
+        asyncio.run(serve(s, server_url or s.server_url, token, password_hash, demo_scenarios))
     except KeyboardInterrupt:
         pass
     return 0

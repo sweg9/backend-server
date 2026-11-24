@@ -21,11 +21,19 @@ The hub refuses every sign-in until it has APP_PASSWORD_HASH (C-10: it lives onl
 ssh -i ~/Downloads/NOVA.pem ec2-user@<address>
 sudo -u sweg9 /opt/sweg9/backend-server/.venv/bin/backend hash-password      # type the team's password
 echo "APP_PASSWORD_HASH='<the printed hash>'" | sudo tee -a /etc/sweg9/backend.env >/dev/null
+grep -q DEMO_SCENARIOS /etc/sweg9/backend.env || echo DEMO_SCENARIOS=1 | sudo tee -a /etc/sweg9/backend.env >/dev/null
 sudo systemctl restart sweg9-hub
 journalctl -u sweg9-hub -u sweg9-server -f                                    # logs
 ```
 
 ## Using it from the web app
+
+The hub runs with the demo scenarios on (`DEMO_SCENARIOS=1`), so the app can make things happen and watch
+them on `/ws/app`:
+
+```bash
+curl -X POST "http://<address>/scenarios/leave_home/start?speed=2" -b "session=..."    # or new_control
+```
 
 Point the dev server's proxy at `http://<address>` (Vite: `server.proxy` sends `/api` there and strips
 `/api`). Going through the proxy keeps the `Secure`, `SameSite=Strict` session cookie on `localhost`.

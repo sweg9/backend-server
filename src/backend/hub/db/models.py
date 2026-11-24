@@ -290,6 +290,39 @@ for ddl in APPEND_ONLY_TRIGGERS:
     event.listen(Run.__table__, "after_create", ddl.execute_if(dialect="sqlite"))
 
 
+SITUATION_STATUSES = [
+    "received",
+    "planning",
+    "waiting_for_answer",
+    "running",
+    "done",
+    "needs_attention",
+    "suggested",
+    "dismissed",
+    "cancelled",
+]
+
+
+class Situation(Base):
+    """One trigger and what the hub planned and did for it (wiki: API > situations). `plan` holds one
+    item per device: decision, method, wireless result, run and the resident's choice after a failure."""
+
+    __tablename__ = "situations"
+    __table_args__ = (
+        one_of("trigger", Trigger),
+        one_of("status", SITUATION_STATUSES),
+        Index("ix_situations_received_at", "received_at"),
+    )
+    situation_id: Mapped[str] = mapped_column(String, primary_key=True)
+    kind: Mapped[str] = mapped_column(String)
+    trigger: Mapped[str] = mapped_column(String)
+    summary: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String)
+    plan: Mapped[list] = mapped_column(JSON)
+    received_at: Mapped[datetime] = mapped_column(UtcTime)
+    updated_at: Mapped[datetime] = mapped_column(UtcTime)
+
+
 # --- Other ------------------------------------------------------------------------------
 
 

@@ -8,6 +8,7 @@ Every route but `POST /login` needs a session: the cookie value is looked up by 
 Changes the resident makes are pushed back to the app as `app.event` through `emit`.
 """
 
+import asyncio
 import hashlib
 import logging
 import re
@@ -25,23 +26,33 @@ from sqlalchemy.orm import sessionmaker
 
 from backend.common.ids import new_id
 from backend.common.messages import AppRequest, AppResponse
-from backend.common.vocab import DeviceAction, Independence, MappingStatus, Risk, RoutineFeedback
-from backend.hub.db.models import AppState, ChannelRow, Control, Device, Feedback, Mapping, Routine, Run, Session
+from backend.common.vocab import DeviceAction, Independence, MappingStatus, Risk, RoutineFeedback, RunResult
+from backend.hub.db.models import (
+    AppState,
+    ChannelRow,
+    Control,
+    Device,
+    Feedback,
+    Mapping,
+    Routine,
+    Run,
+    Session,
+    Situation,
+)
+from backend.hub.orchestrator import Busy, Orchestrator
+from backend.hub.prefs import PROACTIVE_KEY
+from backend.hub.scenario import SCENARIOS
+from backend.hub.scenario import start as start_scenario
+from backend.hub.views import control_view, device_view, iso, mapping_view, routine_view, run_view, situation_view
 
 log = logging.getLogger(__name__)
 Emit = Callable[[str, dict[str, Any]], Awaitable[None]]
 
-PROACTIVE_KEY = "proactive"
-RUN_FIELDS = ("run_id", "trigger", "intent", "device_id", "confidence", "channel", "result", "reason", "explanation")
 TIME_OF_DAY = r"^([01]\d|2[0-3]):[0-5]\d$"
 
 
 def now() -> datetime:
     return datetime.now(UTC)
-
-
-def iso(t: datetime) -> str:
-    return t.astimezone(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 def token_hash(token: str) -> str:
@@ -87,75 +98,30 @@ class ProactiveSetting(Body):
     paused: bool
 
 
-# --- views in the spec's shapes ----------------------------------------------------------------
-
-
-def control_view(c: Control) -> dict[str, Any]:
-    return {
-        "control_id": c.control_id,
-        "kind": c.kind,
-        "state": c.state,
-        "actions": c.actions,
-        "position": c.panel_point or [],
-        "seen_at": iso(c.seen_at),
-    }
-
-
-def device_view(d: Device, channels: list[str]) -> dict[str, Any]:
-    return {
-        "device_id": d.device_id,
-        "name": d.name,
-        "type": d.type,
-        "room": d.room,
-        "risk": d.risk,
-        "channels": channels,
-    }
-
-
-def mapping_view(m: Mapping) -> dict[str, Any]:
-    return {
-        "mapping_id": m.mapping_id,
-        "control_id": m.control_id,
-        "device_id": m.device_id,
-        "status": m.status,
-        "confidence": m.confidence,
-    }
-
-
-def routine_view(r: Routine) -> dict[str, Any]:
-    out = {
-        "routine_id": r.routine_id,
-        "mapping_id": r.mapping_id,
-        "action": r.action,
-        "source": r.source,
-        "independence": r.independence,
-        "priority": r.priority,
-    }
-    if r.time:
-        out["time"] = r.time
-    return out
-
-
-def run_view(r: Run) -> dict[str, Any]:
-    """The spec's Run: a subset of the whole run entry (execution-log.md) kept in `entry`."""
-    out = {k: r.entry[k] for k in RUN_FIELDS if r.entry.get(k) is not None}
-    out["started_at"] = iso(r.started_at)
-    return out
-
-
 # --- the handlers ------------------------------------------------------------------------------
 
 Handler = Callable[[Db, AppRequest, dict[str, str]], Awaitable[AppResponse]]
 
 
 class AppHandlers:
-    def __init__(self, db: sessionmaker, session_days: int, password_hash: str | None, emit: Emit):
+    def __init__(
+        self,
+        db: sessionmaker,
+        session_days: int,
+        password_hash: str | None,
+        emit: Emit,
+        orch: Orchestrator | None = None,
+        demo_scenarios: bool = False,
+    ):
         self.db = db
+        self.orch = orch
+        self.demo_scenarios = demo_scenarios
         self.session_days = session_days
         self.password_hash = password_hash
         self.emit = emit
         self._hasher = PasswordHasher()
         self._events: list[tuple[str, dict[str, Any]]] = []
+        self._background: set[asyncio.Task] = set()
         self._routes: list[tuple[str, re.Pattern[str], Handler, bool]] = []
         r = self._route
         r("POST", "/login", self.login, signed_in=False)
@@ -173,6 +139,16 @@ class AppHandlers:
         r("GET", "/runs", self.runs)
         r("POST", "/stop", self.stop)
         r("PUT", "/proactive", self.set_proactive)
+        r("GET", "/situations", self.situations)
+        r("GET", "/situations/{situation_id}", self.situation)
+        r("POST", "/situations/{situation_id}/approve", self.approve)
+        r("POST", "/situations/{situation_id}/dismiss", self.dismiss)
+        r("GET", "/visits", self.visits)
+        r("GET", "/robot", self.robot)
+        r("POST", "/runs/{run_id}/retry", self.retry)
+        r("POST", "/runs/{run_id}/leave", self.leave)
+        r("GET", "/scenarios", self.scenarios)
+        r("POST", "/scenarios/{name}/start", self.start_scenario)
 
     def _route(self, method: str, path: str, handler: Handler, signed_in: bool = True) -> None:
         pattern = re.compile("^" + re.sub(r"\{(\w+)\}", r"(?P<\1>[^/]+)", path) + "$")
@@ -393,8 +369,105 @@ class AppHandlers:
             row.value = value
         return AppResponse(status=200, body=value)
 
+    # --- situations, visits and the robot --------------------------------------------------------
 
-def proactive(db: Db) -> dict[str, Any]:
-    """The resident's pause setting (FR-06): not paused until the resident pauses."""
-    row = db.get(AppState, PROACTIVE_KEY)
-    return row.value if row is not None else {"paused": False}
+    def _orch(self) -> Orchestrator:
+        if self.orch is None:
+            raise ApiError(503, "not_running", "The hub's runs are not running")
+        return self.orch
+
+    async def situations(self, db: Db, _req, _p) -> AppResponse:
+        rows = db.scalars(select(Situation).order_by(Situation.received_at.desc()).limit(50)).all()
+        return AppResponse(status=200, body=[situation_view(x) for x in rows])
+
+    def _situation(self, db: Db, situation_id: str) -> dict[str, Any]:
+        live = self.orch.situations.get(situation_id) if self.orch else None
+        if live is not None:
+            return live
+        row = db.get(Situation, situation_id)
+        if row is None:
+            raise ApiError(404, "unknown_situation", "Unknown situation")
+        return situation_view(row)
+
+    async def situation(self, db: Db, _req, p) -> AppResponse:
+        return AppResponse(status=200, body=self._situation(db, p["situation_id"]))
+
+    async def _answer(self, db: Db, situation_id: str, yes: bool) -> AppResponse:
+        sit = self._situation(db, situation_id)
+        if not self._orch().answer(situation_id, yes):
+            raise ApiError(409, "not_waiting", "This situation is not waiting for an answer")
+        return AppResponse(status=200, body=sit)
+
+    async def approve(self, db: Db, _req, p) -> AppResponse:
+        return await self._answer(db, p["situation_id"], True)
+
+    async def dismiss(self, db: Db, _req, p) -> AppResponse:
+        return await self._answer(db, p["situation_id"], False)
+
+    async def visits(self, _db, _req, _p) -> AppResponse:
+        return AppResponse(status=200, body=self._orch().visits)
+
+    async def robot(self, _db, _req, _p) -> AppResponse:
+        return AppResponse(status=200, body=self._orch().robot.view())
+
+    # --- after a failure, the resident chooses (C-09) ---------------------------------------------
+
+    def _failed(self, run_id: str):
+        orch = self._orch()
+        try:
+            run, sit = orch.settled_run(run_id)
+        except KeyError as e:
+            raise ApiError(404, "unknown_run", "Unknown run") from e
+        if run.result == RunResult.SUCCESS:
+            raise ApiError(409, "not_failed", "Only a failed, unsure or cancelled run can be retried or left")
+        item = next((i for i in (sit or {}).get("plan", []) if i["run_id"] == run_id), None)
+        if run_id in orch.resolved or (item is not None and item.get("resolution")):
+            raise ApiError(409, "already_chosen", "The resident already chose for this run")
+        return orch, run, sit, item
+
+    async def retry(self, _db, _req, p) -> AppResponse:
+        orch, run, sit, item = self._failed(p["run_id"])
+        try:
+            orch.start("retry", lambda: orch.retry(run, sit))
+        except Busy as e:
+            raise ApiError(409, "robot_busy", "The robot is busy", str(e)) from e
+        orch.resolved.add(run.run_id)
+        if item is not None:
+            item["resolution"] = "retry"
+        return AppResponse(status=202, body={"run_id": run.run_id, "choice": "retry"})
+
+    async def leave(self, _db, _req, p) -> AppResponse:
+        orch, run, sit, item = self._failed(p["run_id"])
+        orch.resolved.add(run.run_id)
+        if item is not None:
+            item["resolution"] = "leave"
+        task = asyncio.create_task(orch.leave(run, sit))
+        self._background.add(task)
+        task.add_done_callback(self._background.discard)
+        return AppResponse(status=200, body={"run_id": run.run_id, "choice": "leave"})
+
+    # --- demo scenarios (scenario.py) ------------------------------------------------------------
+
+    def _demo(self) -> None:
+        if not self.demo_scenarios:
+            raise ApiError(404, "not_found", "No such route")
+
+    async def scenarios(self, _db, _req, _p) -> AppResponse:
+        self._demo()
+        return AppResponse(status=200, body=[{"name": k, "description": d} for k, (d, _) in SCENARIOS.items()])
+
+    async def start_scenario(self, _db, req: AppRequest, p) -> AppResponse:
+        self._demo()
+        if p["name"] not in SCENARIOS:
+            raise ApiError(404, "unknown_scenario", f"Unknown scenario: {p['name']}")
+        try:
+            speed = float(req.query.get("speed", "1"))
+        except ValueError as e:
+            raise ApiError(422, "invalid", "speed is a number") from e
+        if not 0.1 <= speed <= 20:
+            raise ApiError(422, "invalid", "speed is from 0.1 to 20")
+        try:
+            start_scenario(self._orch(), p["name"], speed)
+        except Busy as e:
+            raise ApiError(409, "robot_busy", "The robot is busy", str(e)) from e
+        return AppResponse(status=202, body={"started": p["name"], "speed": speed})

@@ -17,7 +17,7 @@ sudo -u sweg9 -H bash -c "cd $APP && $UV sync $EXTRAS && $UV run --no-sync backe
 
 # Secrets live only on the instance (C-10). HUB_TOKEN is made here; APP_PASSWORD_HASH is added over SSH.
 install -d -m 750 -g sweg9 /etc/sweg9
-echo "HUB_TOKEN=$(openssl rand -hex 32)" >/etc/sweg9/backend.env
+printf 'HUB_TOKEN=%s\nDEMO_SCENARIOS=1\n' "$(openssl rand -hex 32)" >/etc/sweg9/backend.env
 chgrp sweg9 /etc/sweg9/backend.env
 chmod 640 /etc/sweg9/backend.env
 

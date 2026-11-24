@@ -4,9 +4,11 @@ info:
   version: 0.1.0
   x-status: proposed
   description: >
-    What the dashboard needs that openapi/backend-server.yaml (0.3.0) does not have yet. Nothing here is
-    served: a route moves into backend-server.yaml (and the server and hub) when the team adopts it, maybe
-    changed. Same session cookie and Error shape as the team spec.
+    What the dashboard needs that openapi/backend-server.yaml does not have yet. Nothing here is served: a
+    route moves into backend-server.yaml (and the server and hub) when the team adopts it, maybe changed.
+    Same session cookie and Error shape as the team spec. Adopted in 0.4.0 and gone from here: situations,
+    visits, GET /robot (without position, heading_deg, path and camera, which stay proposed here with the
+    map), retry and leave, and the live kinds situation, visits and robot.
 servers:
   - url: http://localhost:8000
 security:
@@ -49,77 +51,6 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ProactiveSetting' }
-  /situations:
-    get:
-      tags: [Situations]
-      summary: Situations, newest first
-      x-requirements: [FR-05, FR-06]
-      responses:
-        '200':
-          description: Situations
-          content:
-            application/json:
-              schema: { type: array, items: { $ref: '#/components/schemas/Situation' } }
-  /situations/{situation_id}:
-    get:
-      tags: [Situations]
-      summary: One situation with its plan
-      parameters: [{ $ref: '#/components/parameters/situation_id' }]
-      responses:
-        '200':
-          description: Situation
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Situation' }
-        '404': { $ref: '#/components/responses/NotFound' }
-  /situations/{situation_id}/approve:
-    post:
-      tags: [Situations]
-      summary: Answer yes to a situation that waits for an answer (decision ask)
-      x-requirements: [FR-06]
-      parameters: [{ $ref: '#/components/parameters/situation_id' }]
-      responses:
-        '200':
-          description: Situation
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Situation' }
-        '409': { $ref: '#/components/responses/Conflict' }
-  /situations/{situation_id}/dismiss:
-    post:
-      tags: [Situations]
-      summary: Answer no; nothing is done
-      x-requirements: [FR-06]
-      parameters: [{ $ref: '#/components/parameters/situation_id' }]
-      responses:
-        '200':
-          description: Situation
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Situation' }
-        '409': { $ref: '#/components/responses/Conflict' }
-  /visits:
-    get:
-      tags: [Situations]
-      summary: Visit order of the robot (devices wireless could not do, and resident requests)
-      x-requirements: [FR-07, FR-09]
-      responses:
-        '200':
-          description: Visits
-          content:
-            application/json:
-              schema: { type: array, items: { $ref: '#/components/schemas/Visit' } }
-  /robot:
-    get:
-      tags: [Robot]
-      summary: Robot state, position on the map, current task and route
-      x-requirements: [FR-09, FR-10]
-      responses:
-        '200':
-          description: Robot
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Robot' }
   /robot/goto:
     post:
       tags: [Robot]
@@ -173,32 +104,6 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/RunDetail' }
         '404': { $ref: '#/components/responses/NotFound' }
-  /runs/{run_id}/retry:
-    post:
-      tags: [Runs]
-      summary: The resident chooses to try again (C-09). Opens a new run; the robot goes on its own
-      x-requirements: [FR-08, FR-11]
-      parameters: [{ $ref: '#/components/parameters/run_id' }]
-      responses:
-        '202':
-          description: Started
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Choice' }
-        '409': { $ref: '#/components/responses/Conflict' }
-  /runs/{run_id}/leave:
-    post:
-      tags: [Runs]
-      summary: The resident chooses to leave it as it is. Nothing is pressed
-      x-requirements: [FR-08, FR-11]
-      parameters: [{ $ref: '#/components/parameters/run_id' }]
-      responses:
-        '200':
-          description: Saved
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Choice' }
-        '409': { $ref: '#/components/responses/Conflict' }
   /mappings/{mapping_id}:
     patch:
       tags: [Mappings]

@@ -1,4 +1,4 @@
-from backend.server.api import controls, devices, mappings, routines, runs, safety, session
+from backend.server.api import controls, demo, devices, mappings, routines, runs, safety, session, situations
 
 ROUTERS = [
     session.router,
@@ -8,4 +8,6 @@ ROUTERS = [
     routines.router,
     runs.router,
     safety.router,
+    situations.router,
+    demo.router,
 ]

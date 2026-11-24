@@ -23,11 +23,11 @@ The design is on the wiki: [Stack](https://sweg9.github.io/docs/overview/stack),
 A skeleton of the 2026-11-20 split ([Modules](https://sweg9.github.io/docs/overview/modules)). Built and tested:
 
 - **common:** the shared names (`vocab.py`), every hub message of contract version 2 (`messages.py`), the run entry with rules L-04, L-05 and L-09 (`runlog.py`), the settings files, JSON logs (`logs.py`).
-- **hub:** the database tables and their migrations, the daily backup, the channel adapter and RAL interfaces with the `stub` and `script` implementations, the link to the server (`link.py`: token, reconnect, heartbeat, stop first), every route of the spec answered from the database with sign-in and sessions (`app.py`), the explanation templates (`explain.py`), and `backend seed-demo` (`seed.py`, `demo_home.json`).
+- **hub:** the database tables and their migrations, the daily backup, the channel adapter and RAL interfaces with the `stub` and `script` implementations, the link to the server (`link.py`: token, reconnect, heartbeat, stop first), every route of the spec answered from the database with sign-in and sessions (`app.py`), the explanation templates (`explain.py`), `backend seed-demo` (`seed.py`, `demo_home.json`), the orchestrator (`orchestrator.py`: plan, wireless first, visit order, press after the gate, one more look after unsure, retry or leave, emergency stop), the run log (`runs.py`), situations, and the demo scenarios as a trigger source (`scenario.py`, `--demo-scenarios`).
 - **server:** every API route of the spec, relayed to the hub (`503` while the hub is offline), the login limit, the emergency stop that waits for `stop.done`, and the hub's WebSocket, which hands the hub's requests to the enclave.
 - **enclave:** the autonomy policy (`decide`, FR-06).
 
-Every other module has a docstring that says what it will do: the hub's scan, triggers and runs, sealing photos, the vsock link and the enclave program. Until the runs are built, the run log holds only what `seed-demo` put there. The Dockerfile and the Kubernetes manifests in `deploy/` have not been run yet.
+Every other module has a docstring that says what it will do: the hub's scan, the time and sensor triggers, the real answers over the link (enclave decisions, camera checks, the safety gate), sealing photos, the vsock link and the enclave program. Until those answers are built, the orchestrator decides on the safe side (only suggest, no press); a demo scenario gives fixed answers instead. The Dockerfile and the Kubernetes manifests in `deploy/` have not been run yet.
 
 ## Run
 
@@ -44,8 +44,10 @@ The server and the hub on one machine, with the demo home (for the web app's dev
 export HUB_TOKEN=dev APP_PASSWORD_HASH='<from hash-password>'
 uv run backend seed-demo                   # once; delete data/hub/app.db to start over
 uv run backend server --port 8000
-uv run backend hub --stdout --server-url ws://127.0.0.1:8000/ws/hub
+uv run backend hub --stdout --demo-scenarios --server-url ws://127.0.0.1:8000/ws/hub
 ```
+
+With `--demo-scenarios`, `POST /scenarios/leave_home/start` (demo scenario 3) or `new_control` (scenario 1) plays fixed answers through the real orchestrator; watch it on `/ws/app`. Without the flag those routes answer 404.
 
 The session cookie is `Secure` and `SameSite=Strict`, so the web app calls the server through its dev server's proxy (for Vite: `server.proxy` sends `/api` to `http://127.0.0.1:8000` and strips `/api`, like the ingress). Browsers accept `Secure` cookies on `http://localhost`.
 
