@@ -1,0 +1,477 @@
+openapi: 3.1.0
+info:
+  title: dashboard routes for backend-server (proposed)
+  version: 0.1.0
+  x-status: proposed
+  description: >
+    What the dashboard needs that openapi/backend-server.yaml (0.3.0) does not have yet. Nothing here is
+    served: a route moves into backend-server.yaml (and the server and hub) when the team adopts it, maybe
+    changed. Same session cookie and Error shape as the team spec.
+servers:
+  - url: http://localhost:8000
+security:
+  - session: []
+tags:
+  - name: Status
+    description: What is happening now (dashboard "현황")
+  - name: Situations
+    description: A situation comes in, a plan is built, wireless results come back (dashboard "상황 → 루틴 → 실행")
+  - name: Robot
+    description: Where the robot is, what it does, and where to send it (dashboard "로봇 이동 지시")
+  - name: Map
+    description: The rough 3D map with tags and links (screen 2)
+  - name: Runs
+    description: Detail of a run and the resident's choice after a failure (dashboard "실패 화면")
+  - name: Mappings
+    description: Change and check again (dashboard "매핑 관리")
+  - name: Stats
+paths:
+  /status:
+    get:
+      tags: [Status]
+      summary: Everything the status panel needs in one call
+      x-requirements: [FR-05, FR-10, FR-12]
+      responses:
+        '200':
+          description: Status
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Status' }
+  /proactive:
+    get:
+      tags: [Status]
+      summary: Read the proactive setting (the team spec has only PUT)
+      x-requirements: [FR-06]
+      x-note: PUT /proactive in the team spec gains the optional field ask_before_act.
+      responses:
+        '200':
+          description: Setting
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProactiveSetting' }
+  /situations:
+    get:
+      tags: [Situations]
+      summary: Situations, newest first
+      x-requirements: [FR-05, FR-06]
+      responses:
+        '200':
+          description: Situations
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Situation' } }
+  /situations/{situation_id}:
+    get:
+      tags: [Situations]
+      summary: One situation with its plan
+      parameters: [{ $ref: '#/components/parameters/situation_id' }]
+      responses:
+        '200':
+          description: Situation
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Situation' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /situations/{situation_id}/approve:
+    post:
+      tags: [Situations]
+      summary: Answer yes to a situation that waits for an answer (decision ask)
+      x-requirements: [FR-06]
+      parameters: [{ $ref: '#/components/parameters/situation_id' }]
+      responses:
+        '200':
+          description: Situation
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Situation' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /situations/{situation_id}/dismiss:
+    post:
+      tags: [Situations]
+      summary: Answer no; nothing is done
+      x-requirements: [FR-06]
+      parameters: [{ $ref: '#/components/parameters/situation_id' }]
+      responses:
+        '200':
+          description: Situation
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Situation' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /visits:
+    get:
+      tags: [Situations]
+      summary: Visit order of the robot (devices wireless could not do, and resident requests)
+      x-requirements: [FR-07, FR-09]
+      responses:
+        '200':
+          description: Visits
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Visit' } }
+  /robot:
+    get:
+      tags: [Robot]
+      summary: Robot state, position on the map, current task and route
+      x-requirements: [FR-09, FR-10]
+      responses:
+        '200':
+          description: Robot
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Robot' }
+  /robot/goto:
+    post:
+      tags: [Robot]
+      summary: Send the robot to one place, or through several in order ("go here", "stop by here, then there")
+      description: Each stop is a spot_id, a control_id (its press spot) or a device_id (the press spot of its Verified control). Moving only; nothing is pressed. The safety gate still applies on the real hub.
+      x-requirements: [FR-09, FR-10]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [stops]
+              properties:
+                stops: { type: array, minItems: 1, items: { type: string } }
+      responses:
+        '202':
+          description: Started
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [stops, route]
+                properties:
+                  stops: { type: array, items: { type: string }, description: Resolved spot ids }
+                  route: { type: array, items: { type: string }, description: Every spot on the way, in order }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /map:
+    get:
+      tags: [Map]
+      summary: The rough 3D map with rooms, spots, controls, devices and links
+      x-requirements: [FR-01, FR-02]
+      responses:
+        '200':
+          description: Map
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Map' }
+  /runs/{run_id}:
+    get:
+      tags: [Runs]
+      summary: The whole run entry (execution-log.md) plus the resident's choice
+      description: For the failure screen - which device, by which method, why it failed.
+      x-requirements: [FR-08, FR-12]
+      parameters: [{ $ref: '#/components/parameters/run_id' }]
+      responses:
+        '200':
+          description: Run entry
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RunDetail' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /runs/{run_id}/retry:
+    post:
+      tags: [Runs]
+      summary: The resident chooses to try again (C-09). Opens a new run; the robot goes on its own
+      x-requirements: [FR-08, FR-11]
+      parameters: [{ $ref: '#/components/parameters/run_id' }]
+      responses:
+        '202':
+          description: Started
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Choice' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /runs/{run_id}/leave:
+    post:
+      tags: [Runs]
+      summary: The resident chooses to leave it as it is. Nothing is pressed
+      x-requirements: [FR-08, FR-11]
+      parameters: [{ $ref: '#/components/parameters/run_id' }]
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Choice' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /mappings/{mapping_id}:
+    patch:
+      tags: [Mappings]
+      summary: Change which device a control runs. The mapping goes back to Pending (C-08)
+      x-requirements: [FR-02]
+      parameters: [{ $ref: '#/components/parameters/mapping_id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [device_id]
+              properties:
+                device_id: { type: string }
+      responses:
+        '200':
+          description: Mapping (team shape)
+        '404': { $ref: '#/components/responses/NotFound' }
+  /mappings/{mapping_id}/recheck:
+    post:
+      tags: [Mappings]
+      summary: Have the robot check the mapping again. It becomes Stale, then Verified or not
+      x-requirements: [FR-02, FR-12]
+      parameters: [{ $ref: '#/components/parameters/mapping_id' }]
+      responses:
+        '202':
+          description: Started; the mapping (team shape)
+        '409': { $ref: '#/components/responses/Conflict' }
+  /stats:
+    get:
+      tags: [Stats]
+      summary: Success rates, failure reasons, frequent devices, mapping ratio
+      x-requirements: [FR-12]
+      responses:
+        '200':
+          description: Stats
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Stats' }
+x-websocket:
+  path: /ws/app
+  message: '{kind, data}, the payload of backend-server''s app.event'
+  team_kinds: [control, mapping, routine, scan, run.progress, run.result, notification]
+  proposed_kinds:
+    status: Status, once on connect and when the proactive setting changes
+    situation: Situation, on every change of its status or plan
+    robot: Robot, on every movement tick (about 4 per second) and state change
+    visits: '{visits: Visit[]}'
+  proposed_fields:
+    scan: >
+      {scan_id, status: started|running|done|checked, spot_id, frame, person,
+      detections: [{kind, box, score, clear, state, state_confidence, gang, control_id,
+      link_guess: {device_id, device_class, label, p}, caution, caution_reason}],
+      check (status checked): {change, device_type, device_box, device_id, confidence, reason}, guess, guess_right}.
+      Same fields as recognize.result in Hub messages, plus link_guess.device_id/label and caution.
+    run.progress: '{run_id, situation_id, device_id, stage, step, method: wireless|press, channel}'
+    run.result: Run (team shape)
+    notification: '{level: info|warning, topic, message, at, choices?: [retry, leave] | [approve, dismiss], run_id?, situation_id?}'
+    mapping: Mapping (team shape), plus previous_device_id when a wrong guess was fixed
+components:
+  securitySchemes:
+    session: { type: apiKey, in: cookie, name: session }
+  parameters:
+    situation_id: { name: situation_id, in: path, required: true, schema: { type: string } }
+    run_id: { name: run_id, in: path, required: true, schema: { type: string } }
+    mapping_id: { name: mapping_id, in: path, required: true, schema: { type: string } }
+  responses:
+    NotFound:
+      description: Unknown id
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Conflict:
+      description: Not possible now (robot busy, not waiting, already chosen)
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties: { code: { type: string }, message: { type: string }, reason: { type: [string, 'null'] } }
+    Vec3: { type: array, items: { type: number }, minItems: 3, maxItems: 3, description: 'Meters: x east, y up, z north' }
+    ProactiveSetting:
+      type: object
+      required: [paused]
+      properties:
+        paused: { type: boolean }
+        ask_before_act: { type: boolean, description: 'Proposed. true: every act becomes ask (the resident approves each situation)' }
+    Status:
+      type: object
+      required: [hub, proactive, robot, situations, visits]
+      properties:
+        hub: { type: string, enum: [online, offline] }
+        camera: { type: string, enum: [ok, down] }
+        proactive: { $ref: '#/components/schemas/ProactiveSetting' }
+        robot: { $ref: '#/components/schemas/Robot' }
+        situations: { type: array, items: { $ref: '#/components/schemas/Situation' }, description: Not finished yet }
+        visits: { type: array, items: { $ref: '#/components/schemas/Visit' }, description: Not done or cancelled }
+        busy: { type: [string, 'null'], description: Name of the task the robot is on }
+    Situation:
+      type: object
+      required: [situation_id, kind, trigger, summary, received_at, status, plan]
+      properties:
+        situation_id: { type: string }
+        kind: { type: string, description: 'For example leave_home' }
+        trigger: { type: string, enum: [sensor, time, routine] }
+        summary: { type: string, description: Plain-language sentence }
+        received_at: { type: string, format: date-time }
+        status: { type: string, enum: [received, planning, waiting_for_answer, running, done, needs_attention, suggested, dismissed, cancelled] }
+        plan: { type: array, items: { $ref: '#/components/schemas/PlanItem' } }
+    PlanItem:
+      type: object
+      required: [device_id, mapping_id, action, decision, confidence, method, wireless]
+      properties:
+        device_id: { type: string }
+        name: { type: string }
+        room: { type: string }
+        risk: { type: string, enum: [low, high] }
+        mapping_id: { type: string }
+        routine_id: { type: [string, 'null'], description: The routine it came from; null when made for this situation }
+        action: { type: string, enum: ['on', 'off'] }
+        decision: { type: string, enum: [act, ask, suggest] }
+        confidence: { type: number }
+        method: { type: string, enum: [wireless, press], description: press once wireless failed or there is no channel }
+        wireless:
+          type: object
+          properties:
+            channel: { type: [string, 'null'], enum: [IR, WIFI, BT, null] }
+            result: { type: string, enum: [pending, success, failure, no_channel] }
+            reason: { type: string }
+        run_id: { type: [string, 'null'] }
+        result: { type: [string, 'null'], enum: [success, failure, unsure, cancelled, null] }
+        reason: { type: [string, 'null'] }
+        resolution: { type: [string, 'null'], enum: [retry, leave, null] }
+    Visit:
+      type: object
+      required: [visit_id, order, spot_id, device_id, reason, status]
+      properties:
+        visit_id: { type: string }
+        order: { type: integer, minimum: 1 }
+        situation_id: { type: [string, 'null'] }
+        spot_id: { type: string }
+        control_id: { type: [string, 'null'] }
+        device_id: { type: string }
+        run_id: { type: [string, 'null'] }
+        reason: { type: string, enum: [no_channel, wireless_failed, requested] }
+        status: { type: string, enum: [waiting, moving, pressing, checking, done, failed, cancelled] }
+    Robot:
+      type: object
+      required: [state, spot_id, position, heading_deg, path, plan, ral]
+      properties:
+        state: { type: string, enum: [idle, moving, waiting, scanning, watching, pressing, checking, stopped] }
+        spot_id: { type: string, description: Last spot reached }
+        position: { $ref: '#/components/schemas/Vec3' }
+        heading_deg: { type: number, description: '0 = north (+z), clockwise' }
+        task:
+          type: [object, 'null']
+          properties:
+            run_id: { type: [string, 'null'] }
+            device_id: { type: [string, 'null'] }
+            stage: { type: [string, 'null'], enum: [S1, S2, S3, S4, S5, S6, S7, null] }
+            step: { type: string, description: Plain words, for example "safety gate - no person in the work area" }
+            method: { type: [string, 'null'], enum: [wireless, press, null] }
+            channel: { type: [string, 'null'], enum: [IR, WIFI, BT, ARM, null] }
+        path:
+          type: array
+          description: Waypoints to the next stop, numbered for the floor arrows
+          items:
+            type: object
+            properties: { order: { type: integer }, spot_id: { type: string }, position: { $ref: '#/components/schemas/Vec3' } }
+        plan: { type: array, items: { type: string }, description: Stops still ahead, in order }
+        camera:
+          type: object
+          properties: { available: { type: boolean }, reason: { type: string }, url: { type: string } }
+        ral:
+          type: object
+          properties:
+            impl: { type: string, enum: [linear_actuators, unity_sim, script] }
+            state: { type: string, enum: [idle, busy, stopped, error] }
+    Map:
+      type: object
+      required: [rooms, spots, edges, controls, devices, links]
+      properties:
+        units: { type: string }
+        axes: { type: string }
+        rooms:
+          type: array
+          items:
+            type: object
+            properties: { room_id: { type: string }, name: { type: string }, min: { $ref: '#/components/schemas/Vec3' }, max: { $ref: '#/components/schemas/Vec3' } }
+        spots:
+          type: array
+          items:
+            type: object
+            properties: { spot_id: { type: string }, room: { type: string }, position: { $ref: '#/components/schemas/Vec3' }, heading_deg: { type: number } }
+        edges: { type: array, items: { type: array, items: { type: string }, minItems: 2, maxItems: 2 } }
+        controls:
+          type: array
+          items:
+            type: object
+            properties:
+              control_id: { type: string }
+              kind: { type: string, enum: [switch, toggle, power_strip] }
+              room: { type: string }
+              position: { $ref: '#/components/schemas/Vec3' }
+              press_spot: { type: string }
+              caution: { type: boolean, description: 'true for power strips: shown as "caution", not pressed by hand' }
+              label: { type: string, description: 'Tag text: kind and role' }
+        devices:
+          type: array
+          items:
+            type: object
+            properties:
+              device_id: { type: string }
+              name: { type: string }
+              type: { type: string }
+              room: { type: string }
+              risk: { type: string, enum: [low, high] }
+              state: { type: string, enum: ['on', 'off', unknown] }
+              position: { $ref: '#/components/schemas/Vec3' }
+        links:
+          type: array
+          description: Not Rejected mappings with a device. solid = Verified, dashed = otherwise
+          items:
+            type: object
+            properties:
+              mapping_id: { type: string }
+              control_id: { type: string }
+              device_id: { type: string }
+              status: { type: string, enum: [Pending, Verified, Stale] }
+              line: { type: string, enum: [solid, dashed] }
+    RunDetail:
+      description: The run entry of execution-log.md, plus action, situation_id, routine_id and resolution
+      type: object
+      required: [run_id, trigger, started_at, device_id, attempts, stages]
+      properties:
+        run_id: { type: string }
+        trigger: { type: string }
+        started_at: { type: string, format: date-time }
+        intent: { type: string }
+        device_id: { type: string }
+        risk: { type: string }
+        confidence: { type: number }
+        decision: { type: string }
+        channel: { type: [string, 'null'] }
+        result: { type: [string, 'null'], description: null while the run is still open }
+        reason: { type: [string, 'null'] }
+        checks: { type: [object, 'null'] }
+        stages: { type: array, items: { type: object } }
+        attempts: { type: array, items: { type: object } }
+        explanation: { type: [string, 'null'] }
+        action: { type: string, enum: ['on', 'off'] }
+        situation_id: { type: [string, 'null'] }
+        routine_id: { type: [string, 'null'] }
+        resolution:
+          type: [object, 'null']
+          properties: { choice: { type: string, enum: [retry, leave] }, run_id: { type: [string, 'null'] } }
+    Choice:
+      type: object
+      properties: { run_id: { type: string }, choice: { type: string, enum: [retry, leave] } }
+    Rate:
+      type: object
+      properties: { attempts: { type: integer }, successes: { type: integer }, success_rate: { type: [number, 'null'] } }
+    Stats:
+      type: object
+      properties:
+        runs: { type: integer }
+        results: { type: object, additionalProperties: { type: integer } }
+        wireless: { $ref: '#/components/schemas/Rate' }
+        press: { $ref: '#/components/schemas/Rate' }
+        channels: { type: object, additionalProperties: { $ref: '#/components/schemas/Rate' } }
+        failure_reasons: { type: array, items: { type: object, properties: { reason: { type: string }, count: { type: integer } } } }
+        top_devices: { type: array, items: { type: object, properties: { device_id: { type: string }, name: { type: string }, runs: { type: integer } } } }
+        mappings:
+          type: object
+          properties:
+            by_status: { type: object, additionalProperties: { type: integer } }
+            verified_ratio: { type: [number, 'null'] }

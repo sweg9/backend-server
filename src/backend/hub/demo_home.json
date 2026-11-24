@@ -1,0 +1,51 @@
+{
+  "_note": "Demo home for `backend seed-demo`: made-up records so the app has something to show before a real scan. No photos, no real home (C-05). Keys are local names; the seed gives every record a real id.",
+  "devices": [
+    {"key": "living_ceiling", "name": "Living room ceiling light", "type": "light", "room": "living_room", "risk": "low", "channels": []},
+    {"key": "living_stand", "name": "Living room stand lamp", "type": "light", "room": "living_room", "risk": "low", "channels": []},
+    {"key": "tv", "name": "TV", "type": "tv", "room": "living_room", "risk": "low", "channels": ["WIFI"]},
+    {"key": "kitchen_light", "name": "Kitchen light", "type": "light", "room": "kitchen", "risk": "low", "channels": []},
+    {"key": "fan", "name": "Kitchen fan", "type": "fan", "room": "kitchen", "risk": "low", "channels": ["IR"]},
+    {"key": "bedroom_ceiling", "name": "Bedroom ceiling light", "type": "light", "room": "bedroom", "risk": "low", "channels": ["IR"]},
+    {"key": "purifier", "name": "Air purifier", "type": "air_purifier", "room": "bedroom", "risk": "low", "channels": ["BT"]},
+    {"key": "heater", "name": "Heater", "type": "heater", "room": "bedroom", "risk": "high", "channels": ["WIFI"]}
+  ],
+  "controls": [
+    {"key": "sw_living_1", "kind": "switch", "state": "on", "actions": ["press"], "panel_point": [0.42, 0.31], "spot": "living_wall_1"},
+    {"key": "ps_living", "kind": "power_strip", "state": "on", "actions": ["press"], "panel_point": [0.55, 0.8], "spot": "living_tv"},
+    {"key": "sw_hall_1", "kind": "switch", "state": "unknown", "actions": ["press"], "panel_point": [0.5, 0.35], "spot": "hall_wall_1"},
+    {"key": "sw_kitchen_1", "kind": "switch", "state": "on", "actions": ["press"], "panel_point": [0.4, 0.3], "spot": "kitchen_wall_1"},
+    {"key": "sw_kitchen_2", "kind": "switch", "state": "off", "actions": ["press"], "panel_point": [0.48, 0.3], "spot": "kitchen_wall_1"},
+    {"key": "sw_bedroom_1", "kind": "switch", "state": "on", "actions": ["press"], "panel_point": [0.45, 0.33], "spot": "bedroom_wall_1"},
+    {"key": "tg_purifier", "kind": "toggle", "state": "on", "actions": ["flip"], "panel_point": [0.5, 0.6], "spot": "bedroom_purifier"},
+    {"key": "ps_bedroom", "kind": "power_strip", "state": "on", "actions": ["press"], "panel_point": [0.5, 0.82], "spot": "bedroom_strip"}
+  ],
+  "mappings": [
+    {"key": "m1", "control": "sw_living_1", "device": "living_ceiling", "status": "Verified", "confidence": 0.96},
+    {"key": "m2", "control": "ps_living", "device": "tv", "status": "Verified", "confidence": 0.9},
+    {"key": "m3", "control": "sw_hall_1", "device": "living_ceiling", "status": "Rejected", "confidence": 0.41},
+    {"key": "m4", "control": "sw_kitchen_1", "device": "kitchen_light", "status": "Verified", "confidence": 0.93},
+    {"key": "m5", "control": "sw_kitchen_2", "device": "fan", "status": "Stale", "confidence": 0.18},
+    {"key": "m6", "control": "sw_bedroom_1", "device": "bedroom_ceiling", "status": "Verified", "confidence": 0.91},
+    {"key": "m7", "control": "tg_purifier", "device": "purifier", "status": "Verified", "confidence": 0.97},
+    {"key": "m8", "control": "ps_bedroom", "device": "heater", "status": "Verified", "confidence": 0.88},
+    {"key": "m9", "control": "sw_hall_1", "device": null, "status": "Pending", "confidence": 0.35}
+  ],
+  "routines": [
+    {"key": "rt1", "mapping": "m1", "action": "off", "time": "23:30", "source": "habit", "independence": "act_and_tell", "priority": 1},
+    {"key": "rt2", "mapping": "m4", "action": "on", "time": "07:00", "source": "habit", "independence": "ask_first", "priority": 2},
+    {"key": "rt3", "mapping": "m8", "action": "off", "time": "08:30", "source": "manual", "independence": "act_and_tell", "priority": 3}
+  ],
+  "past_runs": [
+    {"hours_ago": 74, "trigger": "time", "device": "living_ceiling", "action": "off", "routine": "rt1", "attempts": [["ARM", "no"], ["ARM", "no"]], "result": "failure", "reason": "pressed twice, the light stayed on"},
+    {"hours_ago": 50, "trigger": "time", "device": "living_ceiling", "action": "off", "routine": "rt1", "attempts": [["ARM", "yes"]], "result": "success"},
+    {"hours_ago": 46, "trigger": "time", "device": "kitchen_light", "action": "on", "routine": "rt2", "attempts": [["ARM", "yes"]], "result": "success"},
+    {"hours_ago": 40, "trigger": "time", "device": "heater", "action": "off", "routine": "rt3", "attempts": [["WIFI", "yes"]], "result": "success"},
+    {"hours_ago": 30, "trigger": "sensor", "device": "bedroom_ceiling", "action": "off", "attempts": [["IR", "no"], ["ARM", "yes"]], "result": "success"},
+    {"hours_ago": 28, "trigger": "sensor", "device": "purifier", "action": "off", "attempts": [["BT", "no"]], "result": "cancelled", "reason": "a person was in the work area"},
+    {"hours_ago": 26, "trigger": "time", "device": "living_ceiling", "action": "off", "routine": "rt1", "attempts": [["ARM", "yes"]], "result": "success"},
+    {"hours_ago": 22, "trigger": "time", "device": "kitchen_light", "action": "on", "routine": "rt2", "attempts": [["ARM", "unsure"]], "result": "unsure", "reason": "the camera could not tell whether the light changed"},
+    {"hours_ago": 16, "trigger": "time", "device": "heater", "action": "off", "routine": "rt3", "attempts": [["WIFI", "no"], ["ARM", "yes"]], "result": "success"},
+    {"hours_ago": 10, "trigger": "sensor", "device": "tv", "action": "off", "attempts": [["WIFI", "yes"]], "result": "success"}
+  ]
+}

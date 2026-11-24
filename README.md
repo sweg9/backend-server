@@ -23,11 +23,11 @@ The design is on the wiki: [Stack](https://sweg9.github.io/docs/overview/stack),
 A skeleton of the 2026-11-20 split ([Modules](https://sweg9.github.io/docs/overview/modules)). Built and tested:
 
 - **common:** the shared names (`vocab.py`), every hub message of contract version 2 (`messages.py`), the run entry with rules L-04, L-05 and L-09 (`runlog.py`), the settings files, JSON logs (`logs.py`).
-- **hub:** the database tables and their migrations, the daily backup, the channel adapter and RAL interfaces with the `stub` and `script` implementations.
+- **hub:** the database tables and their migrations, the daily backup, the channel adapter and RAL interfaces with the `stub` and `script` implementations, the link to the server (`link.py`: token, reconnect, heartbeat, stop first), every route of the spec answered from the database with sign-in and sessions (`app.py`), the explanation templates (`explain.py`), and `backend seed-demo` (`seed.py`, `demo_home.json`).
 - **server:** every API route of the spec, relayed to the hub (`503` while the hub is offline), the login limit, the emergency stop that waits for `stop.done`, and the hub's WebSocket, which hands the hub's requests to the enclave.
 - **enclave:** the autonomy policy (`decide`, FR-06).
 
-Every other module has a docstring that says what it will do: the hub's scan, runs and app handlers, sealing photos, the vsock link and the enclave program. The Dockerfile and the Kubernetes manifests in `deploy/` have not been run yet.
+Every other module has a docstring that says what it will do: the hub's scan, triggers and runs, sealing photos, the vsock link and the enclave program. Until the runs are built, the run log holds only what `seed-demo` put there. The Dockerfile and the Kubernetes manifests in `deploy/` have not been run yet.
 
 ## Run
 
@@ -37,6 +37,17 @@ uv run pytest                              # tests, including the import rules
 uv run ruff check . && uv run ruff format --check .
 uv run backend hash-password               # prints the value for APP_PASSWORD_HASH
 ```
+
+The server and the hub on one machine, with the demo home (for the web app's development):
+
+```bash
+export HUB_TOKEN=dev APP_PASSWORD_HASH='<from hash-password>'
+uv run backend seed-demo                   # once; delete data/hub/app.db to start over
+uv run backend server --port 8000
+uv run backend hub --stdout --server-url ws://127.0.0.1:8000/ws/hub
+```
+
+The session cookie is `Secure` and `SameSite=Strict`, so the web app calls the server through its dev server's proxy (for Vite: `server.proxy` sends `/api` to `http://127.0.0.1:8000` and strips `/api`, like the ingress). Browsers accept `Secure` cookies on `http://localhost`.
 
 On AWS: set up the EC2 instance as `deploy/README.md` says, then `kubectl apply -k deploy/k8s` there. The hub runs on the laptop at home:
 
@@ -56,6 +67,7 @@ The API and the hub's WebSocket are at `https://<domain>/api`, and Grafana at `h
 | `src/backend/enclave/` | Enclave mode, in the Nitro Enclave: the models through `ai_engine` and the autonomy policy. Never imports `hub` or `server` |
 | `settings/` | `hub.yaml`, `server.yaml`, `risk.yaml`: every starting value (C-12). No secrets (C-10). On the cluster, a ConfigMap |
 | `openapi/backend-server.yaml` | The API spec. This repo owns it; copy it to the wiki's `public/api/` when it changes. A test checks that the routes match it |
+| `openapi/dashboard-proposed.yaml` | Routes the dashboard asks for that the spec does not have yet. Not served; adopted routes move into the spec |
 | `migrations/` | Alembic, for the hub's database. Change a table only through a new migration |
 | `Dockerfile`, `deploy/` | The server image, the manifests (`kubectl apply -k deploy/k8s`), and how to set up the EC2 instance (`deploy/README.md`) |
 | `tests/` | `common/`, `hub/`, `server/`, `enclave/`, `contract/`. Mark each test with the requirement it serves: `@pytest.mark.fr("FR-07")` (C-01) |

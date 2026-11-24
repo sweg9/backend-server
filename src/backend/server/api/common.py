@@ -5,7 +5,7 @@ returns the hub's answer (wiki: Hub messages > app.request). While the hub is of
 """
 
 from fastapi import HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from backend.common.messages import AppRequest
 from backend.server.auth import SESSION_COOKIE
@@ -21,7 +21,7 @@ def hub_offline(e: HubOffline) -> ApiError:
     return ApiError(503, "hub_offline", "The hub at home is offline", str(e))
 
 
-async def relay(request: Request) -> JSONResponse:
+async def relay(request: Request) -> Response:
     gateway: HubGateway = request.app.state.hub
     raw = await request.body()
     req = AppRequest(
@@ -35,7 +35,8 @@ async def relay(request: Request) -> JSONResponse:
         resp = await gateway.app_request(req)
     except HubOffline as e:
         raise hub_offline(e) from e
-    out = JSONResponse(resp.body, status_code=resp.status)
+    # 204 (login, logout) has no body at all, not even `null`
+    out = Response(status_code=204) if resp.status == 204 else JSONResponse(resp.body, status_code=resp.status)
     if resp.set_session == "":
         out.delete_cookie(SESSION_COOKIE, secure=True, httponly=True, samesite="strict")
     elif resp.set_session is not None:

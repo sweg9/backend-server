@@ -6,8 +6,35 @@ import sys
 
 
 def _hub(args) -> int:
-    print("hub mode is not built yet", file=sys.stderr)
-    return 1
+    from backend.common import logs
+    from backend.common.settings import HubSettings, load
+    from backend.hub.main import run
+
+    s = load(HubSettings, "hub.yaml")
+    if args.stdout:
+        logs.setup("hub")
+    else:
+        logs.setup("hub", s.log_file, s.log_max_mb, s.log_keep_files)
+        print(f"hub logs go to {s.log_file}", file=sys.stderr)
+    return run(s, args.server_url)
+
+
+def _seed_demo(args) -> int:
+    from backend.common.settings import HubSettings, load
+    from backend.hub.db.session import make_engine, make_sessionmaker
+    from backend.hub.main import migrate
+    from backend.hub.seed import NotEmpty, seed_demo
+
+    s = load(HubSettings, "hub.yaml")
+    migrate(s.database_url)
+    with make_sessionmaker(make_engine(s.database_url))() as db:
+        try:
+            counts = seed_demo(db, s.time_zone)
+        except NotEmpty as e:
+            print(f"{e}; delete {s.database_url} first to start over", file=sys.stderr)
+            return 1
+    print("added the demo home: " + ", ".join(f"{v} {k}" for k, v in counts.items()))
+    return 0
 
 
 def _server(args) -> int:
@@ -63,7 +90,10 @@ def _not_built(name: str):
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="backend")
     sub = p.add_subparsers(dest="command", required=True)
-    sub.add_parser("hub", help="run on the laptop at home").set_defaults(func=_hub)
+    h = sub.add_parser("hub", help="run on the laptop at home")
+    h.add_argument("--server-url", help="instead of server_url in settings/hub.yaml, e.g. ws://127.0.0.1:8000/ws/hub")
+    h.add_argument("--stdout", action="store_true", help="log to stdout instead of log_file (in a container)")
+    h.set_defaults(func=_hub)
     sub.add_parser("enclave", help="run inside the Nitro Enclave").set_defaults(func=_not_built("enclave mode"))
     c = sub.add_parser("server", help="run the server (a pod on k3s on AWS)")
     c.add_argument("--host", default="127.0.0.1", help="0.0.0.0 inside the pod")
@@ -74,7 +104,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("export-runs", help="write the run log as JSON Lines (L-08)").set_defaults(
         func=_not_built("export-runs")
     )
-    sub.add_parser("seed-demo", help="add demo data, such as seed uses").set_defaults(func=_not_built("seed-demo"))
+    sub.add_parser("seed-demo", help="fill an empty hub database with the demo home").set_defaults(func=_seed_demo)
     args = p.parse_args(argv)
     return args.func(args)
 

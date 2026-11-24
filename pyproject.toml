@@ -39,6 +39,7 @@ dev = [
     "ruff>=0.6",
     "import-linter>=2.0",
     "ai-engine",  # without [models]: the enclave tests use FakeEngine and the not-trained answers
+    "jsonschema>=4.23",
 ]
 
 [tool.uv.sources]
