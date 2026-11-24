@@ -21,6 +21,18 @@ printf 'HUB_TOKEN=%s\nDEMO_SCENARIOS=1\n' "$(openssl rand -hex 32)" >/etc/sweg9/
 chgrp sweg9 /etc/sweg9/backend.env
 chmod 640 /etc/sweg9/backend.env
 
+# `sudo /usr/local/bin/sweg9-set-password` over `ssh -t`: asks for the app password, keeps only its hash.
+cat >/usr/local/bin/sweg9-set-password <<'SCRIPT'
+#!/bin/bash
+set -euo pipefail
+H=$(sudo -u sweg9 /opt/sweg9/backend-server/.venv/bin/backend hash-password)
+sed -i "/^APP_PASSWORD_HASH=/d" /etc/sweg9/backend.env
+printf "APP_PASSWORD_HASH='%s'\n" "$H" >> /etc/sweg9/backend.env
+systemctl restart sweg9-hub
+echo "Saved. The hub restarted with the new password."
+SCRIPT
+chmod 755 /usr/local/bin/sweg9-set-password
+
 cat >/etc/systemd/system/sweg9-update.service <<UNIT
 [Unit]
 Description=Pull main of backend-server and sync its packages

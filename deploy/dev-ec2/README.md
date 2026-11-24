@@ -13,18 +13,18 @@ deploy/dev-ec2/dev.sh stop
 
 Every start pulls `main` and syncs the packages before the services start, so a new start runs the newest code.
 
-## Once, after the first start: the app password
+## The app password
 
-The hub refuses every sign-in until it has APP_PASSWORD_HASH (C-10: it lives only on the instance).
+The hub refuses every sign-in until it has APP_PASSWORD_HASH (C-10: it lives only on the instance). It is
+one password for the whole team, as the app has one resident. Run this in a terminal of your own, not in
+a chat or a shared log, and choose a password used nowhere else:
 
 ```bash
-ssh -i ~/Downloads/NOVA.pem ec2-user@<address>
-sudo -u sweg9 /opt/sweg9/backend-server/.venv/bin/backend hash-password      # type the team's password
-echo "APP_PASSWORD_HASH='<the printed hash>'" | sudo tee -a /etc/sweg9/backend.env >/dev/null
-grep -q DEMO_SCENARIOS /etc/sweg9/backend.env || echo DEMO_SCENARIOS=1 | sudo tee -a /etc/sweg9/backend.env >/dev/null
-sudo systemctl restart sweg9-hub
-journalctl -u sweg9-hub -u sweg9-server -f                                    # logs
+ssh -t -i ~/Downloads/NOVA.pem ec2-user@<address> sudo /usr/local/bin/sweg9-set-password
 ```
+
+It asks twice, stores only the hash and restarts the hub. Run it again to change the password; sessions
+already open stay valid until they expire. Logs: `journalctl -u sweg9-hub -u sweg9-server -f`.
 
 ## Using it from the web app
 
