@@ -52,6 +52,29 @@ The architecture of 2026-11-25: **Hub: Reader → Encryption → (HTTPS) → ser
 4. **The enclave program** (`enclave/main.py`): build the enclave image with `kmstool_enclave_cli` at `/app/kmstool_enclave_cli`; get temporary credentials from the parent over vsock; `Handlers(engine, settings, risk, opener(KmstoolKeys(region, proxy_port, credentials)))`. Run `vsock-proxy` for KMS on the parent (`ml-engine` pod).
 5. **A test on AWS:** seal on a laptop with the real key, open in the enclave, and check that the parent instance cannot decrypt the key (KMS refuses without the attestation).
 
+### Security notes
+
+> **Notice.** This is a branch for review, not merged. Sealing is tested only with a fake KMS; nothing here has run against AWS KMS or in a Nitro Enclave yet. Do not rely on it to protect real photos until step 5 above has passed.
+
+What sealing protects, and what it does not:
+
+| | |
+|---|---|
+| **Protected** | The photo's content from the server, the EC2 instance, S3, the network and anyone with the AWS account but not the enclave image: they see only ciphertext, and KMS opens the data key only for the attested image (C-05) |
+| **Protected** | Swapping or moving: a sealed photo opens only under its own `photo_id` and size (GCM associated data), and a changed byte makes it fail |
+| **Not protected** | The hub itself: it holds the photo before sealing. A hub laptop that is taken over sees what the camera sees. Keep it updated and on the home network only |
+| **Not protected** | Metadata: the server sees `photo_id`, the size, when a photo is sent and which step asked for it. Logs refer to a photo only by `photo_id` (L-07) |
+| **Not protected** | The plain data key in the hub's memory: Python cannot wipe it; `seal()` drops it at once |
+
+Rules for everyone who works on this:
+
+- **Never commit credentials** (C-10): AWS keys, `HUB_TOKEN`, `APP_PASSWORD_HASH`, a KMS key's policy with account ids. They come from the environment or Kubernetes Secrets only. `kms_key_id` in `settings/hub.yaml` is an id, not a secret.
+- **Never log or print** a `Sealed` message's `key`, `nonce` or `data`, a plain data key, or an opened photo. Log `photo_id` only.
+- **Never open sealed photos outside the enclave**, and never for training (C-05, decision of 2026-11-24). There is no "debug" path that unseals on the server or a laptop, and none should be added.
+- **Never reuse a data key or a nonce.** `seal()` asks KMS for a new key per photo; keep it that way.
+- **The KMS key policy pins the enclave image** (`kms:RecipientAttestation:ImageSha384`, PCR0). A new enclave image changes it: update the policy with the image, never widen it to "any image".
+- **A change to the format** (`common/sealing.py`) changes `FORMAT` (`nova-seal-v1`), so an old enclave refuses new photos instead of misreading them.
+
 **For the team to decide:** whether the hub calls KMS for every photo (now, as the wiki says; the architecture figure has no Hub → KMS arrow yet) or seals with a KMS asymmetric public key fetched once, so the hub needs no AWS credentials at home.
 
 ## Run
