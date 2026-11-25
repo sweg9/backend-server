@@ -467,7 +467,7 @@ class AppHandlers:
     async def retry(self, db: Db, _req, p) -> AppResponse:
         orch, run, sit, item = self._failed(db, p["run_id"])
         try:
-            ctx = orch.start_retry(run, sit)
+            ctx = orch.start_retry(db, run, sit)
         except Busy as e:
             raise ApiError(409, "robot_busy", "The robot is busy", str(e)) from e
         if ctx is None:

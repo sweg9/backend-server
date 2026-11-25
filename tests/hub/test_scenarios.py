@@ -1,13 +1,14 @@
 """The orchestrator with the demo scenarios as its trigger source (FR-05 to FR-12, C-04, C-09)."""
 
 import asyncio
+import tempfile
 from datetime import UTC, datetime
 
 import pytest
 from argon2 import PasswordHasher
 from sqlalchemy import func, select
 
-from backend.common.messages import AppRequest
+from backend.common.messages import AppEvent, AppRequest
 from backend.common.runlog import RunEntry
 from backend.common.vocab import Channel, HandOption
 from backend.hub.app import AppHandlers
@@ -23,10 +24,14 @@ HASH = PasswordHasher(time_cost=1, memory_cost=8, parallelism=1).hash("pw")
 
 
 class Hub:
-    """The hub's parts without the link: handlers, orchestrator and the events they send."""
+    """The hub's parts without the link: handlers, orchestrator and the events they send.
+
+    The database is a file, as on the hub: with `:memory:` every session shares one connection, so two
+    sessions writing at once (`database is locked`) would never show here."""
 
     def __init__(self, demo=True):
-        engine = make_engine("sqlite:///:memory:")
+        self._dir = tempfile.TemporaryDirectory()
+        engine = make_engine(f"sqlite:///{self._dir.name}/hub.db")
         Base.metadata.create_all(engine)
         self.db = make_sessionmaker(engine)
         with self.db() as s:
@@ -34,6 +39,7 @@ class Hub:
         self.events: list[tuple[str, dict]] = []
 
         async def emit(kind, data):
+            AppEvent(kind=kind, data=data)  # as the link sends it: an unknown kind fails here, not on the hub
             self.events.append((kind, data))
 
         self.ral = make_ral(HandOption.SCRIPT)
@@ -516,5 +522,20 @@ def test_unsure_after_a_failed_press_is_never_pressed_a_third_time():
         assert len(presses) == 2
         assert run.result == "unsure"
         assert [a["answer"] for a in run.entry["attempts"]] == ["no", "unsure"]
+
+    asyncio.run(go())
+
+
+@pytest.mark.fr("FR-11")
+@pytest.mark.fr("FR-08")
+def test_unsure_then_no_on_the_second_look_is_not_pressed_again():
+    async def go():
+        h = Hub()
+        answers = PressAnswers([("unsure", "dark"), ("no", "no change")])
+        _, run, presses = await press_once_more(h, answers)
+        assert len(presses) == 1  # C-09: an unsure check never leads to another press
+        assert run.result == "failure" and not run.entry["reason"].startswith("pressed twice")
+        texts = [d["text"] for k, d in h.events if k == "run.progress" and d["step"] == "check"]
+        assert "it did not work: press once more" not in texts
 
     asyncio.run(go())
