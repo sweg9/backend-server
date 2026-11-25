@@ -23,10 +23,13 @@ hub = [
     "alembic>=1.13",
     "apscheduler>=3.10,<4",
     "argon2-cffi>=23.1",
+    "cryptography>=43",  # seal.py: AES-256-GCM
+    "boto3>=1.35",  # seal.py: KMS data keys
 ]
 # Enclave mode: ai-engine with its YOLO models, pinned to a commit of its yolo11n-640-synth branch.
 enclave = [
     "ai-engine[models]",
+    "cryptography>=43",  # unseal.py: AES-256-GCM
 ]
 
 [project.scripts]
