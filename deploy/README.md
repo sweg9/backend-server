@@ -33,7 +33,7 @@ Then install the Nitro Enclaves Kubernetes device plugin from AWS on the node. `
 GitHub Actions builds the images and pushes them to GHCR:
 - `backend-server`, the server.
 - `ml-engine`, which holds `ml-engine.eif`, built with `nitro-cli build-enclave` from `ai-engine` and the enclave program.
-- `live-demo`, the web app.
+- `live-demo`, the Dashboard (web app).
 
 ## 5. Secrets, settings, manifests
 

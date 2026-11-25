@@ -8,6 +8,7 @@ the link; a scenario (scenario.py) gives fixed ones. Rules kept whatever the ans
 
 - Wireless first, then the press, and only after wireless failed or when there is none (C-09, L-05).
 - The press only after the gate passed right before it (C-04).
+- A failed check after a press leads to one more press after a new gate, at most 2 presses (FR-11, L-04).
 - `unsure` is looked at once more without pressing again, then stays unsure; the resident chooses retry
   or leave (FR-08, FR-11).
 - The emergency stop turns the hand off first, then cancels everything open, a move order too (FR-10).
@@ -25,10 +26,11 @@ from enum import StrEnum
 from typing import Any, Protocol
 
 from sqlalchemy import select
+from sqlalchemy.orm import Session as Db
 from sqlalchemy.orm import sessionmaker
 
 from backend.common.ids import new_id
-from backend.common.runlog import RunEntry
+from backend.common.runlog import MAX_ARM_ATTEMPTS, RunEntry
 from backend.common.vocab import (
     Channel,
     CheckAnswer,
@@ -476,48 +478,63 @@ class Orchestrator:
     # --- one run -------------------------------------------------------------------------------
 
     def open_run(
-        self, trigger: Trigger, item: dict[str, Any], situation_id: str | None, retry_of: str | None = None
+        self,
+        trigger: Trigger,
+        item: dict[str, Any],
+        situation_id: str | None,
+        retry_of: str | None = None,
+        db: Db | None = None,
     ) -> RunCtx:
-        with self.db() as db:
-            m = db.get(Mapping, item["mapping_id"])
-            c = db.get(Control, m.control_id) if m else None
-            r = db.get(Routine, item["routine_id"]) if item.get("routine_id") else None
-            ctx = RunCtx(
-                run_id=new_id("r"),
+        """Writes the `open_runs` row. With `db` (a request's session) the row joins that transaction and the
+        caller commits: a second session would wait on the request's write lock (`database is locked`)."""
+        if db is not None:
+            return self._open_run(db, trigger, item, situation_id, retry_of)
+        with self.db() as own:
+            ctx = self._open_run(own, trigger, item, situation_id, retry_of)
+            own.commit()
+        return ctx
+
+    def _open_run(
+        self, db: Db, trigger: Trigger, item: dict[str, Any], situation_id: str | None, retry_of: str | None
+    ) -> RunCtx:
+        m = db.get(Mapping, item["mapping_id"])
+        c = db.get(Control, m.control_id) if m else None
+        r = db.get(Routine, item["routine_id"]) if item.get("routine_id") else None
+        ctx = RunCtx(
+            run_id=new_id("r"),
+            trigger=trigger,
+            device_id=item["device_id"],
+            device_name=item["name"],
+            risk=item["risk"],
+            mapping_id=item["mapping_id"],
+            control_id=c.control_id if c else None,
+            press_spot=c.press_spot_id if c else None,
+            action=DeviceAction(item["action"]),
+            confidence=item["confidence"],
+            decision=Decision(item["decision"]),
+            routine_id=item.get("routine_id"),
+            routine_time=r.time if r else None,
+            situation_id=situation_id,
+            retry_of=retry_of,
+        )
+        ctx.stages.append({"stage": Stage.S4, "status": "ok", "latency_ms": 900})
+        db.add(
+            OpenRun(
+                run_id=ctx.run_id,
                 trigger=trigger,
-                device_id=item["device_id"],
-                device_name=item["name"],
-                risk=item["risk"],
-                mapping_id=item["mapping_id"],
-                control_id=c.control_id if c else None,
-                press_spot=c.press_spot_id if c else None,
-                action=DeviceAction(item["action"]),
-                confidence=item["confidence"],
-                decision=Decision(item["decision"]),
-                routine_id=item.get("routine_id"),
-                routine_time=r.time if r else None,
+                routine_id=ctx.routine_id,
+                device_id=ctx.device_id,
+                mapping_id=ctx.mapping_id,
+                action=ctx.action,
+                decision=ctx.decision,
+                confidence=ctx.confidence,
+                risk=ctx.risk,
+                phase="running",
+                started_at=ctx.started_at,
+                dedup_key=f"{ctx.device_id}:{ctx.action}",
                 situation_id=situation_id,
-                retry_of=retry_of,
             )
-            ctx.stages.append({"stage": Stage.S4, "status": "ok", "latency_ms": 900})
-            db.add(
-                OpenRun(
-                    run_id=ctx.run_id,
-                    trigger=trigger,
-                    routine_id=ctx.routine_id,
-                    device_id=ctx.device_id,
-                    mapping_id=ctx.mapping_id,
-                    action=ctx.action,
-                    decision=ctx.decision,
-                    confidence=ctx.confidence,
-                    risk=ctx.risk,
-                    phase="running",
-                    started_at=ctx.started_at,
-                    dedup_key=f"{ctx.device_id}:{ctx.action}",
-                    situation_id=situation_id,
-                )
-            )
-            db.commit()
+        )
         self.open[ctx.run_id] = ctx
         return ctx
 
@@ -580,49 +597,72 @@ class Orchestrator:
         await self.move_to(v["spot_id"])
         if self.robot.plan and self.robot.plan[0] == v["spot_id"]:
             self.robot.plan.pop(0)
-        await status("pressing")
-        self.robot.state = "pressing"
-        await self.set_task(Step.GATE, "safety gate: no person in the work area", Stage.S6, ctx, Channel.ARM)
-        ok, why = await self.answers.gate(ctx.device_id)
-        await self.wait(1.0)
-        await self.progress(
-            ctx,
-            Step.GATE,
-            "safety gate passed" if ok else f"safety gate failed: {why}",
-            Stage.S6,
-            Channel.ARM,
-            gate="pass" if ok else "fail",
-            reason=None if ok else why,
-        )
-        if not ok:  # C-04: no press
-            ctx.stages.append({"stage": Stage.S6, "status": "skipped", "latency_ms": 0, "reason": why})
-            await self.close(ctx, RunResult.CANCELLED, why)
-            await status("cancelled")
-            return
-        t = now()
-        await self.set_task(Step.PRESS, "press", Stage.S6, ctx, Channel.ARM)
-        await self.ral.press(self.actuator, PUSH_MS)
-        await self.ral.release(self.actuator)
-        self.robot.state = "checking"
-        await status("checking")
-        await self.set_task(Step.CHECK, "check the effect with the camera", Stage.S6, ctx, Channel.ARM)
-        await self.wait(self.effect_wait_s)
-        answer, why = await self.answers.verify(ctx.device_id, Channel.ARM, ctx.action, None)
-        if answer == CheckAnswer.UNSURE:  # FR-08: one more look, never another press
-            await self.progress(ctx, Step.CHECK, "unsure", Stage.S6, Channel.ARM, answer=answer, reason=why)
-            await self.set_task(Step.CHECK, "unsure: look once more without pressing again", Stage.S6, ctx, Channel.ARM)
-            await self.wait(self.unsure_recheck_s)
+        # FR-11: a failed check (`no`) leads to one more press, after a new gate; at most MAX_ARM_ATTEMPTS
+        # presses (L-04). `unsure` is looked at once more and never pressed again (FR-08, C-09), even when
+        # that second look says `no`: the camera could not tell, and a toggle pressed again would undo a
+        # press that worked.
+        for n in range(1, MAX_ARM_ATTEMPTS + 1):
+            again = n > 1
+            await status("pressing")
+            self.robot.state = "pressing"
+            await self.set_task(
+                Step.GATE,
+                "safety gate before the second press" if again else "safety gate: no person in the work area",
+                Stage.S6,
+                ctx,
+                Channel.ARM,
+            )
+            ok, why = await self.answers.gate(ctx.device_id)
+            await self.wait(1.0)
+            await self.progress(
+                ctx,
+                Step.GATE,
+                "safety gate passed" if ok else f"safety gate failed: {why}",
+                Stage.S6,
+                Channel.ARM,
+                gate="pass" if ok else "fail",
+                reason=None if ok else why,
+            )
+            if not ok:  # C-04: no press
+                ctx.stages.append({"stage": Stage.S6, "status": "skipped", "latency_ms": 0, "reason": why})
+                await self.close(ctx, RunResult.CANCELLED, why)
+                await status("cancelled")
+                return
+            t = now()
+            await self.set_task(Step.PRESS, "press again" if again else "press", Stage.S6, ctx, Channel.ARM)
+            await self.ral.press(self.actuator, PUSH_MS)
+            await self.ral.release(self.actuator)
+            self.robot.state = "checking"
+            await status("checking")
+            await self.set_task(Step.CHECK, "check the effect with the camera", Stage.S6, ctx, Channel.ARM)
+            await self.wait(self.effect_wait_s)
             answer, why = await self.answers.verify(ctx.device_id, Channel.ARM, ctx.action, None)
-        await self.progress(
-            ctx,
-            Step.CHECK,
-            {CheckAnswer.YES: "it worked", CheckAnswer.NO: "it did not work"}.get(answer, "still unsure"),
-            Stage.S6,
-            Channel.ARM,
-            answer=answer,
-            reason=None if answer == CheckAnswer.YES else why,
-        )
-        self.attempt(ctx, Channel.ARM, answer, int((now() - t).total_seconds() * 1000), why)
+            was_unsure = answer == CheckAnswer.UNSURE
+            if was_unsure:  # FR-08: one more look, never another press
+                await self.progress(ctx, Step.CHECK, "unsure", Stage.S6, Channel.ARM, answer=answer, reason=why)
+                await self.set_task(
+                    Step.CHECK, "unsure: look once more without pressing again", Stage.S6, ctx, Channel.ARM
+                )
+                await self.wait(self.unsure_recheck_s)
+                answer, why = await self.answers.verify(ctx.device_id, Channel.ARM, ctx.action, None)
+            more = answer == CheckAnswer.NO and not was_unsure and n < MAX_ARM_ATTEMPTS
+            await self.progress(
+                ctx,
+                Step.CHECK,
+                {
+                    CheckAnswer.YES: "it worked",
+                    CheckAnswer.NO: "it did not work: press once more" if more else "it did not work",
+                }.get(answer, "still unsure"),
+                Stage.S6,
+                Channel.ARM,
+                answer=answer,
+                reason=None if answer == CheckAnswer.YES else why,
+            )
+            self.attempt(ctx, Channel.ARM, answer, int((now() - t).total_seconds() * 1000), why)
+            if not more:
+                break
+        if answer == CheckAnswer.NO and n > 1:
+            why = f"pressed twice: {why or 'the check saw no change'}"
         result = {CheckAnswer.YES: RunResult.SUCCESS, CheckAnswer.NO: RunResult.FAILURE}.get(answer, RunResult.UNSURE)
         await self.close(ctx, result, why)
         await status("done" if result == RunResult.SUCCESS else "failed")
@@ -727,16 +767,19 @@ class Orchestrator:
                         break
             return run, sit
 
-    def start_retry(self, run: Run, sit: dict[str, Any] | None) -> RunCtx | None:
-        """Opens the new run and starts the robot on it; None without a Verified mapping (C-08). Raises Busy
-        before anything is written."""
+    def start_retry(self, db: Db, run: Run, sit: dict[str, Any] | None) -> RunCtx | None:
+        """Opens the new run in `db`, the request's session, and starts the robot on it; None without a
+        Verified mapping (C-08). Raises Busy before anything is written. The task first runs after the
+        request commits, since the handler does not await in between."""
         if self.busy:
             raise Busy(f"the robot is busy with {self.task_name}")
         item = self.plan_item(run.device_id, action_of(run, sit))
         if item is None:
             return None
         item["decision"] = Decision.ACT
-        ctx = self.open_run(Trigger(run.trigger), item, sit["situation_id"] if sit else None, retry_of=run.run_id)
+        ctx = self.open_run(
+            Trigger(run.trigger), item, sit["situation_id"] if sit else None, retry_of=run.run_id, db=db
+        )
         self.start("retry", lambda: self.retry(ctx, run, sit))
         return ctx
 
@@ -773,7 +816,7 @@ class Orchestrator:
         """`stops` are spot ids, already resolved. Raises Busy."""
         if self.busy:
             raise Busy(f"the robot is busy with {self.task_name}")
-        order = {"route_id": new_id("rt"), "stops": list(stops), "reached": 0, "state": "moving", "reason": None}
+        order = {"route_id": new_id("mv"), "stops": list(stops), "reached": 0, "state": "moving", "reason": None}
         self.start("route", lambda: self.drive(order))
         self.route = order
         return order

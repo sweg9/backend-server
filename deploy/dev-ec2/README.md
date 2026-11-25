@@ -1,6 +1,6 @@
 # Dev instance on AWS
 
-One `t3.small` in Seoul that runs the server and the hub side by side with the demo home, so the web app
+One `t3.small` in Seoul that runs the server and the hub side by side with the demo home, so the Dashboard
 can be developed against the real API before the hub at home and the enclave are ready. It is not the
 deployment of the design (that is `deploy/README.md` and `deploy/k8s`). Kept **stopped** when nobody
 uses it: then only its 12 GiB disk is charged.
@@ -26,7 +26,7 @@ ssh -t -i ~/Downloads/NOVA.pem ec2-user@<address> sudo /usr/local/bin/sweg9-set-
 It asks twice, stores only the hash and restarts the hub. Run it again to change the password; sessions
 already open stay valid until they expire. Logs: `journalctl -u sweg9-hub -u sweg9-server -f`.
 
-## Using it from the web app
+## Using it from the Dashboard
 
 The hub runs with the demo scenarios on (`DEMO_SCENARIOS=1`), so the app can make things happen and watch
 them on `/ws/app`:

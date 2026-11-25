@@ -8,7 +8,8 @@ import time
 
 _ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"  # Crockford base32
 
-PREFIXES = {"ctl", "dev", "mp", "rt", "r", "sc", "cr", "use", "fb", "m", "sit", "vis"}
+# mv is a move order (POST /robot/route); rt stays with routines
+PREFIXES = {"ctl", "dev", "mp", "rt", "r", "sc", "cr", "use", "fb", "m", "sit", "vis", "mv"}
 
 
 def ulid(now_ms: int | None = None) -> str:

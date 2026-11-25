@@ -234,6 +234,7 @@ class AppEvent(Msg):
         "situation",  # a Situation of the API, on every change of its status or plan
         "visits",  # {visits: Visit[]}, the robot's visit order
         "robot",  # the Robot of the API, on every change of its state
+        "robot.route",  # a RobotRoute: when a move order starts, at every stop reached and when it ends
     ]
     data: dict[str, Any]
 
