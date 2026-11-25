@@ -76,6 +76,29 @@ def _enclave(args) -> int:
     return 0
 
 
+def _judge(args) -> int:
+    import asyncio
+    import json
+
+    from backend.tools.judge import JudgeError, aggregate, judge, summary, text
+
+    password = os.environ.get("JUDGE_PASSWORD") or getpass.getpass("App password: ")
+    names = ["new_control", "leave_home"] if args.scenario == "all" else [args.scenario]
+    try:
+        reports = asyncio.run(judge(args.url, password, names, args.speed, args.rounds, args.timeout))
+    except JudgeError as e:
+        print(f"judge: {e}", file=sys.stderr)
+        return 2
+    for r in reports:
+        print(text(r) + "\n")
+    if args.rounds > 1:
+        print(json.dumps(aggregate(reports), indent=2))
+    if args.json:
+        with open(args.json, "w") as f:
+            json.dump(summary(reports) | {"aggregate": aggregate(reports)}, f, indent=2)
+    return 0 if all(r.passed for r in reports) else 1
+
+
 def _backup(args) -> int:
     from backend.common import logs
     from backend.common.settings import HubSettings, load
@@ -132,6 +155,14 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--host", default="127.0.0.1", help="0.0.0.0 inside the pod")
     c.add_argument("--port", type=int, default=8000)
     c.set_defaults(func=_server)
+    j = sub.add_parser("judge", help="play demo scenarios 1 and 3 through the API and judge them")
+    j.add_argument("--url", default="http://127.0.0.1:8000", help="the server's API root")
+    j.add_argument("--scenario", choices=["all", "new_control", "leave_home"], default="all")
+    j.add_argument("--speed", type=float, default=1.0, help="1 for the numbers on the slides; up to 20 to go fast")
+    j.add_argument("--rounds", type=int, default=1, help="play each scenario this many times")
+    j.add_argument("--timeout", type=float, default=600, help="seconds for one scenario")
+    j.add_argument("--json", help="also write the reports to this file")
+    j.set_defaults(func=_judge)
     sub.add_parser("backup", help="back up the hub's database and crops").set_defaults(func=_backup)
     sub.add_parser("hash-password", help="print the hash for APP_PASSWORD_HASH").set_defaults(func=_hash_password)
     sub.add_parser("export-runs", help="write the run log as JSON Lines (L-08)").set_defaults(
