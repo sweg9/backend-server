@@ -58,6 +58,24 @@ def _server(args) -> int:
     return 0
 
 
+def _enclave(args) -> int:
+    import asyncio
+
+    from backend.common import logs
+    from backend.enclave.main import EnclaveProgram, build_handlers, serve
+
+    logs.setup("enclave")  # stdout: seen only with nitro-cli console in debug mode
+    tcp_host = None
+    if args.tcp:
+        tcp_host, _, port = args.tcp.rpartition(":")
+        args.port = int(port)
+    try:
+        asyncio.run(serve(EnclaveProgram(build_handlers(args.engine_root)), args.port, tcp_host))
+    except KeyboardInterrupt:
+        pass
+    return 0
+
+
 def _backup(args) -> int:
     from backend.common import logs
     from backend.common.settings import HubSettings, load
@@ -101,7 +119,15 @@ def main(argv: list[str] | None = None) -> int:
         help="allow POST /scenarios/{name}/start (also DEMO_SCENARIOS=1); for development and the demo only",
     )
     h.set_defaults(func=_hub)
-    sub.add_parser("enclave", help="run inside the Nitro Enclave").set_defaults(func=_not_built("enclave mode"))
+    e = sub.add_parser("enclave", help="run inside the Nitro Enclave")
+    e.add_argument("--port", type=int, default=5000, help="the vsock port (enclave_port in settings/server.yaml)")
+    e.add_argument(
+        "--tcp",
+        metavar="HOST:PORT",
+        help="listen on TCP instead of vsock, for tests and development; sealed photos do not open there",
+    )
+    e.add_argument("--engine-root", help="where ai-engine's model files are (default: the ai-engine package's repo)")
+    e.set_defaults(func=_enclave)
     c = sub.add_parser("server", help="run the server (a pod on k3s on AWS)")
     c.add_argument("--host", default="127.0.0.1", help="0.0.0.0 inside the pod")
     c.add_argument("--port", type=int, default=8000)

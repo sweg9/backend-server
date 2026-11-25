@@ -1,8 +1,15 @@
 # Server mode (a pod on k3s on AWS EC2): a relay that keeps no records (wiki: Stack). Starting values to be
 # tuned (C-12). In k8s this file comes from a ConfigMap. Secrets are never here: HUB_TOKEN comes from a k8s
 # Secret (C-10).
+enclave_transport: vsock     # vsock: the Nitro Enclave; tcp: the same program as a plain process (tests, development)
 enclave_cid: 16              # the Nitro Enclave, over vsock
+enclave_host: null           # with tcp, for example 127.0.0.1
 enclave_port: 5000
+enclave_timeout_s: 12        # one request; a little over the hub's longest wait (10 s), so the hub decides first
+enclave_init_timeout_s: 120  # the first init loads the models
+engine_settings_file: ai-engine.yaml  # ai-engine's settings.yaml, passed to the enclave; in settings/ unless absolute
+aws_credentials: instance_role  # instance_role: from IMDSv2 on EC2; none: outside AWS (no photo opens)
+credentials_refresh_before_s: 300
 s3_bucket: null              # sealed photos and model files; set when the AWS account is ready
 hub_offline_after_missed: 3  # heartbeats
 app_timeout_s: 5             # the hub's answer to a relayed call; then 503

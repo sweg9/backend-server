@@ -9,7 +9,7 @@ How to set up the server for the design of 2026-11-20 (wiki: [Stack > Deployment
 - An EC2 instance type with Nitro Enclaves, 4 vCPUs or more, for example `m5.xlarge`. Burstable `t3` types have none.
 - Turn on enclave support when the instance is launched.
 - Amazon Linux 2023, with an EBS volume for Loki's files.
-- An IAM role that may put objects in the S3 bucket and may call KMS for the enclave (step 3).
+- An IAM role that may put objects in the S3 bucket and may call KMS for the enclave (step 3). The server pod hands the role's temporary credentials to the enclave (`aws_credentials: instance_role`), so launch with the metadata hop limit at 2: `--metadata-options HttpTokens=required,HttpPutResponseHopLimit=2`.
 
 ## 2. Enclaves and k3s
 
@@ -46,9 +46,14 @@ kubectl create secret generic grafana -n logging --from-literal=GRAFANA_ADMIN_PA
 kubectl create secret generic loki-push -n logging --from-literal=users='hub:<htpasswd hash>'
 kubectl create secret tls nova-tls -n sweg9 --cert=... --key=...      # and the same in logging
 kubectl create configmap server-settings -n sweg9 --from-file=settings/server.yaml
-kubectl create configmap enclave-settings -n sweg9 --from-file=settings/risk.yaml --from-file=settings/enclave.yaml
+kubectl create configmap enclave-settings -n sweg9 --from-file=settings/risk.yaml --from-file=settings/enclave.yaml \
+  --from-file=ai-engine.yaml=../ai-engine/settings.yaml   # the ai-engine commit the enclave image was built from
 kubectl apply -k deploy/k8s
 ```
+
+The server mounts all three enclave files and sends them in `init` on each new vsock connection (wiki: Hub messages > The enclave link). After changing one, restart the server pod; the enclave reloads its models only when ai-engine's settings changed.
+
+**Without a Nitro Enclave** (development): run the same program as a plain process, `uv run backend enclave --tcp 127.0.0.1:5000 --engine-root ../ai-engine`, and set `enclave_transport: tcp`, `enclave_host: 127.0.0.1` and `aws_credentials: none` in `settings/server.yaml`. Only `decide` answers there: KMS opens no sealed photo outside the attested enclave, so every photo step gets no answer and the hub stays on the safe side.
 
 ## 6. The hub
 

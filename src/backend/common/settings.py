@@ -4,7 +4,7 @@ A missing or unknown key stops the start: the models forbid extra keys.
 """
 
 from pathlib import Path
-from typing import TypeVar
+from typing import Literal, TypeVar
 
 import yaml
 from pydantic import BaseModel, ConfigDict
@@ -80,8 +80,15 @@ class HubSettings(Strict):
 class ServerSettings(Strict):
     """settings/server.yaml: the server on AWS relays and keeps no records."""
 
+    enclave_transport: Literal["vsock", "tcp"]
     enclave_cid: int
+    enclave_host: str | None
     enclave_port: int
+    enclave_timeout_s: float
+    enclave_init_timeout_s: float
+    engine_settings_file: str
+    aws_credentials: Literal["instance_role", "none"]
+    credentials_refresh_before_s: float
     s3_bucket: str | None
     hub_offline_after_missed: int
     app_timeout_s: float
@@ -94,6 +101,8 @@ class EnclaveSettings(Strict):
     """settings/enclave.yaml: the enclave program's limits, passed to it over vsock at start."""
 
     kmstool_timeout_s: float  # C-05: one KMS Decrypt
+    kms_region: str
+    kms_proxy_port: int
 
 
 class RiskSettings(Strict):

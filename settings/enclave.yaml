@@ -1,3 +1,5 @@
 # The enclave program's own limits (C-12), passed to the Nitro Enclave over vsock when it starts, like
 # risk.yaml. The enclave has no disk or network, so no image holds settings.
 kmstool_timeout_s: 10  # one KMS Decrypt through the parent's vsock proxy (C-05); past it the step goes on the safe side
+kms_region: ap-northeast-2  # where the KMS key that seals photos is (Seoul)
+kms_proxy_port: 8000        # the parent's vsock-proxy to KMS

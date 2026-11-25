@@ -34,7 +34,7 @@ class HubOffline(Exception):
 
 
 class Enclave(Protocol):
-    async def ask(self, request: Envelope) -> Envelope: ...
+    async def ask(self, request: Envelope) -> Envelope | None: ...
 
 
 class Live(Protocol):

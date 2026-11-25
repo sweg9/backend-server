@@ -1,5 +1,7 @@
 # The server on AWS EC2 (wiki: Stack > Deployment on AWS). It keeps no database: it relays the app's calls
 # to the hub, passes the hub's requests to the Nitro Enclave over vsock unopened, and puts sealed photos in S3.
+# The temporary AWS credentials it hands the enclave come from the instance role through IMDSv2, so the
+# instance needs a metadata hop limit of 2 (deploy/README.md).
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -25,6 +27,10 @@ spec:
             - secretRef: {name: app}   # HUB_TOKEN
           volumeMounts:
             - {name: settings, mountPath: /app/settings/server.yaml, subPath: server.yaml}
+            # Sent to the enclave in `init` on every new connection, so a restarted enclave gets them again.
+            - {name: enclave-settings, mountPath: /app/settings/risk.yaml, subPath: risk.yaml}
+            - {name: enclave-settings, mountPath: /app/settings/enclave.yaml, subPath: enclave.yaml}
+            - {name: enclave-settings, mountPath: /app/settings/ai-engine.yaml, subPath: ai-engine.yaml}
           readinessProbe:
             httpGet: {path: /healthz, port: http}
             periodSeconds: 5
@@ -38,6 +44,8 @@ spec:
       volumes:
         - name: settings
           configMap: {name: server-settings}
+        - name: enclave-settings
+          configMap: {name: enclave-settings}
 ---
 apiVersion: v1
 kind: Service

@@ -39,6 +39,7 @@ from backend.common.messages import (
     RefindResult,
     Sealed,
 )
+from backend.common.sealing import SealError
 from backend.common.settings import RiskSettings
 from backend.common.vocab import DeviceAction, DeviceType
 from backend.enclave.policy import decide
@@ -86,9 +87,9 @@ class Handlers:
             return None
         try:
             result = handler(request.body())
-        except (EngineError, ValueError, ValidationError) as e:
-            # ValidationError is a ValueError; listed for the reader. Only the error's class is
-            # logged, since its text may quote the payload.
+        except (EngineError, SealError, ValueError, ValidationError) as e:
+            # ValidationError is a ValueError; listed for the reader. SealError: a photo that does not
+            # open (C-05). Only the error's class is logged, since its text may quote the payload.
             log.warning("%s failed: %s", request.type, type(e).__name__, extra={"msg_id": request.id})
             return None
         return Envelope(

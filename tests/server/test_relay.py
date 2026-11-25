@@ -133,7 +133,7 @@ def test_requests_go_to_the_enclave_and_the_answer_comes_back():
 
 def test_an_enclave_that_fails_gives_no_answer():
     """The hub's time limit then decides on the safe side (wiki: Hub messages > Answers that do not come)."""
-    app = create_app(S)  # the vsock link is not built yet
+    app = create_app(S)  # settings/ai-engine.yaml is not in the repo, so the link cannot open
     req = Envelope.model_validate(
         {
             "type": "people",
@@ -170,3 +170,45 @@ def test_detach_fails_the_waiting_calls():
             await gateway.stop()
 
     asyncio.run(go())
+
+
+@pytest.mark.fr("FR-10")
+def test_a_slow_enclave_request_does_not_hold_up_the_stop(monkeypatch):
+    """While the enclave works on a request, the hub's stop.done still gets through (C-04)."""
+    import threading
+    import time
+
+    class SlowEnclave(FakeEnclave):
+        async def ask(self, request):
+            await asyncio.sleep(1.5)
+            return await super().ask(request)
+
+    monkeypatch.setenv("HUB_TOKEN", "t0k3n")
+    decide = {
+        "trigger": "time",
+        "device": {"type": "light", "risk": "low"},
+        "action": "off",
+        "mapping": {"status": "Verified", "confidence": 0.9},
+        "routine": None,
+        "confidence": 0.9,
+    }
+    with (
+        TestClient(create_app(S, enclave=SlowEnclave())) as client,  # one event loop for the socket and the call
+        client.websocket_connect("/ws/hub", headers={"Authorization": "Bearer t0k3n"}) as ws,
+    ):
+        req = {"type": "decide", "id": "m-h-9", "run_id": "r-1", "sent_at": datetime.now(UTC).isoformat()}
+        ws.send_text(Envelope.model_validate({**req, "payload": decide}).model_dump_json())
+        result = {}
+        t0 = time.monotonic()
+        stopper = threading.Thread(target=lambda: result.update(r=client.post("/stop")))
+        stopper.start()
+        me = Envelope.model_validate_json(ws.receive_text())  # the stop route checks the session first
+        assert me.type == "app.request"
+        ws.send_text(envelope("app.response", AppResponse(status=200, body={}), re=me.id).model_dump_json())
+        stop = Envelope.model_validate_json(ws.receive_text())
+        assert stop.type == "stop"
+        ws.send_text(envelope("stop.done", StopDone(ral="stopped"), re=stop.id).model_dump_json())
+        stopper.join(timeout=1)
+        assert result["r"].status_code == 200 and time.monotonic() - t0 < 1.0
+        answer = Envelope.model_validate_json(ws.receive_text())
+        assert answer.type == "decide.result"
