@@ -816,7 +816,7 @@ class Orchestrator:
         """`stops` are spot ids, already resolved. Raises Busy."""
         if self.busy:
             raise Busy(f"the robot is busy with {self.task_name}")
-        order = {"route_id": new_id("rt"), "stops": list(stops), "reached": 0, "state": "moving", "reason": None}
+        order = {"route_id": new_id("mv"), "stops": list(stops), "reached": 0, "state": "moving", "reason": None}
         self.start("route", lambda: self.drive(order))
         self.route = order
         return order
