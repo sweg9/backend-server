@@ -54,7 +54,7 @@ The architecture of 2026-11-25: **Hub: Reader → Encryption → (HTTPS) → ser
 
 ### Security notes
 
-> **Notice.** This is a branch for review, not merged. Sealing is tested only with a fake KMS; nothing here has run against AWS KMS or in a Nitro Enclave yet. Do not rely on it to protect real photos until step 5 above has passed.
+> **Notice.** Sealing is tested only with a fake KMS; nothing here has run against AWS KMS or in a Nitro Enclave yet. Do not rely on it to protect real photos until step 5 above has passed.
 
 What sealing protects, and what it does not:
 
