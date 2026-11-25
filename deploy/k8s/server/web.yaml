@@ -1,4 +1,6 @@
-# The web app (live-demo build served by nginx). Not in kustomization.yaml until the image exists.
+# The Dashboard: live-demo's image, its built app served by nginx as a non-root user on port 8080
+# (live-demo Dockerfile and deploy/nginx.conf). Static files only: no secrets, no settings (C-10).
+# The ingress sends / here and /api to the server, so the browser never calls this pod for the API.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -13,13 +15,35 @@ spec:
     metadata:
       labels: {app: web}
     spec:
+      automountServiceAccountToken: false   # it never calls the Kubernetes API
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: {type: RuntimeDefault}
       containers:
         - name: web
           image: ghcr.io/sweg9/live-demo:latest
           ports:
-            - {name: http, containerPort: 80}
+            - {name: http, containerPort: 8080}
+          securityContext:
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}   # nginx's pid and temp files; the rest stays read-only
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 20
+            failureThreshold: 3
           resources:
+            requests: {cpu: 10m, memory: 16Mi}
             limits: {cpu: 100m, memory: 64Mi}
+      volumes:
+        - name: tmp
+          emptyDir: {sizeLimit: 16Mi}
 ---
 apiVersion: v1
 kind: Service
@@ -30,3 +54,24 @@ spec:
   selector: {app: web}
   ports:
     - {name: http, port: 80, targetPort: http}
+---
+# Only Traefik (k3s puts it in kube-system) may reach the pod, and the pod reaches nothing: it serves files
+# and never calls out. Enforced by k3s's built-in network policy controller.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: web
+  namespace: sweg9
+spec:
+  podSelector:
+    matchLabels: {app: web}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: kube-system}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: traefik}
+      ports:
+        - {port: http}
+  egress: []

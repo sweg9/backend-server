@@ -9,7 +9,7 @@ resources:
   - server/server.yaml
   - server/ml-engine.yaml
   - server/ingress.yaml
+  - server/web.yaml          # the Dashboard, ghcr.io/sweg9/live-demo
   - logging/loki.yaml
   - logging/alloy.yaml
   - logging/grafana.yaml
-  # - server/web.yaml        # add when live-demo builds the sweg9/live-demo image

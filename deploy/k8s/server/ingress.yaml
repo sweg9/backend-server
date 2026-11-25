@@ -25,10 +25,10 @@ spec:
       services:
         - name: server
           port: 8000
-    # - match: Host(`nova.example.com`)                         # the app, with server/web.yaml
-    #   kind: Rule
-    #   services:
-    #     - name: web
-    #       port: 80
+    - match: Host(`nova.example.com`)                           # the Dashboard (server/web.yaml)
+      kind: Rule
+      services:
+        - name: web
+          port: 80
   tls:
     secretName: nova-tls
