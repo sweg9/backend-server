@@ -455,8 +455,11 @@ class PressAnswers:
         self.checks = list(checks)
         self.gates = list(gates or [])
 
-    async def decide(self, item, paused):
-        return await self.base.decide(item, paused)
+    async def decide(self, item, paused, trigger):
+        return await self.base.decide(item, paused, trigger)
+
+    async def look_before(self, device_id, channel):
+        pass
 
     async def verify(self, device_id, channel, action, sent):
         return self.checks.pop(0)

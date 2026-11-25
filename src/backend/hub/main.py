@@ -1,8 +1,9 @@
 """Starts the hub parts from settings/hub.yaml: the database, the RAL and the link to the server.
 
 Built so far: the records and the app's calls (app.py), the orchestrator with the emergency stop, the
-link with its heartbeat, and the demo scenarios as a trigger source (--demo-scenarios). The real
-answers (enclave, camera, gate), the scan and the time and sensor triggers join here as they are built.
+link with its heartbeat, the real answers over the link with the Reader's photos (answers.py, camera.py),
+and the demo scenarios as a trigger source (--demo-scenarios). The scan and the time and sensor triggers
+join here as they are built.
 """
 
 import asyncio
@@ -16,13 +17,16 @@ from alembic.config import Config
 from backend.common.messages import HubStatus, RalStatus, StopDone
 from backend.common.settings import REPO, HubSettings
 from backend.common.vocab import Channel
+from backend.hub.answers import LinkAnswers
 from backend.hub.app import AppHandlers
+from backend.hub.camera import Reader
 from backend.hub.channels.stub import StubAdapter
 from backend.hub.db.session import make_engine, make_sessionmaker
 from backend.hub.link import HubLink
-from backend.hub.orchestrator import Orchestrator, SafeAnswers
+from backend.hub.orchestrator import Orchestrator
 from backend.hub.ral import make_ral
 from backend.hub.runs import end_left_open
+from backend.hub.seal import data_keys
 
 log = logging.getLogger(__name__)
 
@@ -56,11 +60,25 @@ def build(
     async def emit(kind: str, data: dict) -> None:
         await link.event(kind, data)
 
+    kms: list = []  # one KMS client, made at the first photo; SealError while kms_key_id is not set
+
+    def keys():
+        if not kms:
+            kms.append(data_keys(s))
+        return kms[0]
+
+    reader = Reader(s.camera_index, s.photo_max_side, s.photo_jpeg_quality, s.camera_flush_frames, keys=keys)
+    if not s.kms_key_id:
+        log.warning("kms_key_id is not set: no photo leaves the home, so every camera step goes on the safe side")
+
+    async def ask(type_, payload, timeout_s):
+        return await link.ask(type_, payload, timeout_s)
+
     orch = Orchestrator(
         db,
         ral,
         {c: StubAdapter(c) for c in (Channel.IR, Channel.WIFI, Channel.BT)},
-        SafeAnswers(),
+        LinkAnswers(ask, reader.photo, db, s),
         emit,
         time_zone=s.time_zone,
         effect_wait_s=s.effect_wait_s,
@@ -72,10 +90,12 @@ def build(
         return StopDone(ral=await orch.stop())
 
     def status() -> HubStatus:
-        # The Reader (camera.py) is not built yet, so the camera reads as down.
         run_id = (orch.robot.task or {}).get("run_id")
         return HubStatus(
-            camera="down", ral=RalStatus(impl=ral.impl, state=orch.robot.ral_state), run_id=run_id, watching=0
+            camera="ok" if reader.up else "down",
+            ral=RalStatus(impl=ral.impl, state=orch.robot.ral_state),
+            run_id=run_id,
+            watching=0,
         )
 
     app = AppHandlers(db, s.session_days, password_hash, emit=emit, orch=orch, demo_scenarios=demo_scenarios)

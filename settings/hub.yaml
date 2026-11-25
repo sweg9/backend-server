@@ -6,6 +6,8 @@ hand: script                 # linear_actuators | unity_sim | script (FR-11, C-1
 serial_port: null            # for example /dev/tty.usbserial-0001 with linear_actuators
 camera_index: 0
 photo_max_side: 1280         # longest side of a photo sent to the enclave
+photo_jpeg_quality: 85       # 0 to 100
+camera_flush_frames: 3       # frames dropped before a photo, so it is not an old one from the buffer
 log_file: data/hub/hub.log   # an Alloy on this laptop pushes it to Loki on AWS
 log_max_mb: 10
 log_keep_files: 5

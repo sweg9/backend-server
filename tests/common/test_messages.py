@@ -114,9 +114,15 @@ def test_answers_need_re_and_requests_have_none():
         Envelope(type="recognize", id="m-1", re="m-0", run_id=None, sent_at=datetime.now(UTC), payload={})
 
 
-def test_run_requests_need_run_id():
+def test_refind_needs_run_id():
     with pytest.raises(ValidationError):
-        Envelope(type="decide", id="m-1", run_id=None, sent_at=datetime.now(UTC), payload={})
+        Envelope(type="refind", id="m-1", run_id=None, sent_at=datetime.now(UTC), payload=EXAMPLES["refind"])
+
+
+def test_decide_and_people_may_come_before_or_outside_a_run():
+    """decide comes before the run is opened; people also guards a move order (FR-10)."""
+    for type_ in ("decide", "people"):
+        Envelope(type=type_, id="m-1", run_id=None, sent_at=datetime.now(UTC), payload=EXAMPLES[type_])
 
 
 @pytest.mark.fr("FR-08")

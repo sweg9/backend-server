@@ -33,6 +33,8 @@ class HubSettings(Strict):
     serial_port: str | None
     camera_index: int
     photo_max_side: int
+    photo_jpeg_quality: int
+    camera_flush_frames: int
     log_file: str
     log_max_mb: int
     log_keep_files: int

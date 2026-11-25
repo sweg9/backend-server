@@ -316,8 +316,9 @@ ANSWERS = {
     "app.request": "app.response",
     "stop": "stop.done",
 }
-# Requests that belong to a run carry its run_id.
-RUN_TYPES = {"refind", "people", "decide"}
+# Requests that always belong to a run carry its run_id. `decide` comes before the run is opened, and
+# `people` also guards a move order, which is no run; they carry a run_id only when there is one.
+RUN_TYPES = {"refind"}
 
 
 class Envelope(Msg):

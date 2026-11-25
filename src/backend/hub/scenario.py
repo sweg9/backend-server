@@ -66,7 +66,10 @@ class ScriptedAnswers:
     outcomes: dict[tuple[str, Channel], Outcome] = field(default_factory=dict)
     low_confidence: float = 0.5
 
-    async def decide(self, item: dict[str, Any], paused: bool) -> Decision:
+    async def look_before(self, device_id: str, channel: Channel) -> None:
+        pass
+
+    async def decide(self, item: dict[str, Any], paused: bool, trigger: Trigger) -> Decision:
         # The hub's own rules (FR-06 pause, the routine's independence) and a confidence floor, in place of
         # the enclave's policy.
         if paused or item.get("independence") == Independence.SUGGEST_ONLY or item["confidence"] < self.low_confidence:

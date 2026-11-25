@@ -4,7 +4,7 @@ Every step goes to the app as `app.event`.
 
 Where the answers come from is behind `Answers`: the decision (the enclave's `decide`), the effect check
 (the platform's report or the camera's `check`) and the safety gate (`people`). The real answers go over
-the link; a scenario (scenario.py) gives fixed ones. Rules kept whatever the answers are:
+the link (answers.py); a scenario (scenario.py) gives fixed ones. Rules kept whatever the answers are:
 
 - Wireless first, then the press, and only after wireless failed or when there is none (C-09, L-05).
 - The press only after the gate passed right before it (C-04).
@@ -76,7 +76,10 @@ class Step(StrEnum):
 
 
 class Answers(Protocol):
-    async def decide(self, item: dict[str, Any], paused: bool) -> Decision: ...
+    async def decide(self, item: dict[str, Any], paused: bool, trigger: Trigger) -> Decision: ...
+
+    async def look_before(self, device_id: str, channel: Channel) -> None:
+        """Just before a wireless command: whatever the effect check will compare against."""
 
     async def verify(
         self, device_id: str, channel: Channel, action: DeviceAction, sent: SendResult | None
@@ -88,11 +91,14 @@ class Answers(Protocol):
 
 
 class SafeAnswers:
-    """Until the link's real answers are built: what the hub does when an answer does not come in time
-    (wiki: Hub messages > Answers that do not come). Only suggest, unsure, and no press."""
+    """What the hub does when no answer comes in time (wiki: Hub messages > Answers that do not come):
+    only suggest, unsure, and no press. The real answers are answers.LinkAnswers."""
 
-    async def decide(self, item: dict[str, Any], paused: bool) -> Decision:
+    async def decide(self, item: dict[str, Any], paused: bool, trigger: Trigger) -> Decision:
         return Decision.SUGGEST
+
+    async def look_before(self, device_id: str, channel: Channel) -> None:
+        pass
 
     async def verify(self, device_id, channel, action, sent) -> tuple[CheckAnswer, str | None]:
         return CheckAnswer.UNSURE, "no check answer"
@@ -370,7 +376,7 @@ class Orchestrator:
             item = self.plan_item(device_id, action)
             if item is None:
                 continue
-            item["decision"] = await self.answers.decide(item, paused)
+            item["decision"] = await self.answers.decide(item, paused, trigger)
             item.pop("independence")
             sit["plan"].append(item)
             await self.save_situation(sit)
@@ -562,6 +568,7 @@ class Orchestrator:
         await self.set_task(Step.WIRELESS, f"send over {channel}", Stage.S5, ctx, channel)
         t = now()
         adapter = self.adapters.get(channel)
+        await self.answers.look_before(ctx.device_id, channel)
         sent = await adapter.send(ctx.device_id, None, ctx.action) if adapter else None
         await self.wait(1.2)
         if sent is None or not sent.sent:
