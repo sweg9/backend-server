@@ -11,7 +11,7 @@ from backend.common.messages import AppRequest
 from backend.common.runlog import RunEntry
 from backend.common.vocab import Channel, HandOption
 from backend.hub.app import AppHandlers
-from backend.hub.db.models import Base, Control, Mapping, OpenRun, Routine, Run, Scan, Situation
+from backend.hub.db.models import Base, Control, Device, Mapping, OpenRun, Routine, Run, Scan, Situation
 from backend.hub.db.session import make_engine, make_sessionmaker
 from backend.hub.orchestrator import Orchestrator, SafeAnswers
 from backend.hub.ral import make_ral
@@ -103,7 +103,18 @@ def test_leave_home_wireless_first_then_visits_and_presses():
         for r in runs:
             RunEntry.model_validate(r.entry)
         presses = [c for c in h.ral.calls if c[0] == "press"]
-        assert len(presses) == 4  # one each; the unsure kitchen light is looked at again, not pressed again
+        # one each, and a second for the bedroom light whose first press failed (FR-11); the unsure kitchen
+        # light is looked at again, not pressed again
+        assert len(presses) == 5
+        assert p["Bedroom ceiling light"]["result"] == "success"
+        bedroom = next(r for r in runs if r.run_id == p["Bedroom ceiling light"]["run_id"])
+        assert [(a["channel"], a["answer"]) for a in bedroom.entry["attempts"]] == [
+            ("IR", "no"),
+            ("ARM", "no"),
+            ("ARM", "yes"),
+        ]
+        kitchen = next(r for r in runs if r.run_id == p["Kitchen light"]["run_id"])
+        assert [a["channel"] for a in kitchen.entry["attempts"]] == ["ARM"]
         return h, p
 
     asyncio.run(go())
@@ -421,5 +432,89 @@ def test_a_move_order_waits_for_the_gate_and_the_stop_cancels_it():
         await h.orch.stop()
         last = [d for k, d in h.events if k == "robot.route" and d["route_id"] == r.body["route_id"]][-1]
         assert (last["state"], last["reason"]) == ("cancelled", "emergency stop")
+
+    asyncio.run(go())
+
+
+# --- FR-11: the second press ----------------------------------------------------------------------
+
+
+class PressAnswers:
+    """Act, no wireless, and the given check answers and gates for the presses, in order."""
+
+    def __init__(self, checks, gates=None):
+        from backend.hub.scenario import ScriptedAnswers
+
+        self.base = ScriptedAnswers()
+        self.checks = list(checks)
+        self.gates = list(gates or [])
+
+    async def decide(self, item, paused):
+        return await self.base.decide(item, paused)
+
+    async def verify(self, device_id, channel, action, sent):
+        return self.checks.pop(0)
+
+    async def gate(self, device_id):
+        return self.gates.pop(0) if self.gates else (True, None)
+
+    async def route_gate(self, spot_id):
+        return True, None
+
+
+async def press_once_more(h, answers):
+    h.orch.answers = answers
+    h.orch.speed = 1000
+    with h.db() as s:
+        dev = s.scalar(select(Device).where(Device.name == "Living room ceiling light")).device_id  # no channel
+    sit = await h.orch.handle_situation("test", "sensor", "A test.", [(dev, "off")], paused=False)
+    run = h.runs()[-1]
+    RunEntry.model_validate(run.entry)
+    presses = [c for c in h.ral.calls if c[0] == "press"]
+    return sit, run, presses
+
+
+@pytest.mark.fr("FR-11")
+def test_a_failed_check_leads_to_one_more_press_and_no_third():
+    async def go():
+        h = Hub()
+        no = ("no", "the camera saw no change")
+        sit, run, presses = await press_once_more(h, PressAnswers([no, no]))
+        assert len(presses) == 2
+        assert run.result == "failure" and run.entry["reason"].startswith("pressed twice")
+        assert [(a["channel"], a["gate"]) for a in run.entry["attempts"]] == [("ARM", "pass"), ("ARM", "pass")]
+        gates = [d for k, d in h.events if k == "run.progress" and d["step"] == "gate" and "gate" in d]
+        assert [g["gate"] for g in gates] == ["pass", "pass"]  # a new gate before each press (C-04)
+        assert sit["status"] == "needs_attention"
+
+    asyncio.run(go())
+
+
+@pytest.mark.fr("FR-11")
+@pytest.mark.fr("FR-10")
+def test_a_failed_gate_before_the_second_press_cancels_without_pressing():
+    async def go():
+        h = Hub()
+        answers = PressAnswers(
+            [("no", "the camera saw no change")], gates=[(True, None), (False, "a person came near")]
+        )
+        _, run, presses = await press_once_more(h, answers)
+        assert len(presses) == 1
+        assert (run.result, run.entry["reason"]) == ("cancelled", "a person came near")
+        assert [a["channel"] for a in run.entry["attempts"]] == ["ARM"]
+
+    asyncio.run(go())
+
+
+@pytest.mark.fr("FR-11")
+@pytest.mark.fr("FR-08")
+def test_unsure_after_a_failed_press_is_never_pressed_a_third_time():
+    async def go():
+        h = Hub()
+        answers = PressAnswers([("no", "no change"), ("unsure", "dark"), ("unsure", "still dark")])
+        _, run, presses = await press_once_more(h, answers)
+        assert len(presses) == 2
+        assert run.result == "unsure"
+        assert [a["answer"] for a in run.entry["attempts"]] == ["no", "unsure"]
 
     asyncio.run(go())

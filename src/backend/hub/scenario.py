@@ -10,8 +10,9 @@ that is the real hub: the orchestrator, the run entries, the records and the eve
   Verified; a habit routine is added.
 - `leave_home` (demo scenario 3, FR-05 to FR-12): "you left home" comes in; the plan turns off what is
   on; TV and heater go off over Wi-Fi, the purifier gets no Bluetooth answer and the bedroom light no
-  IR effect, two lights have no channel; the robot visits and presses; the kitchen light stays unsure
-  after one more look, so the resident chooses retry or leave.
+  IR effect, two lights have no channel; the robot visits and presses; the bedroom light shows no change
+  after the first press, so the robot passes the gate again and presses once more, which works; the
+  kitchen light stays unsure after one more look, so the resident chooses retry or leave.
 """
 
 from collections.abc import Awaitable, Callable
@@ -143,6 +144,9 @@ async def leave_home(orch: Orchestrator) -> None:
         {
             (names["Bedroom ceiling light"], Channel.IR): Outcome(
                 CheckAnswer.NO, "the camera saw no change after the IR command"
+            ),
+            (names["Bedroom ceiling light"], Channel.ARM): Outcome(  # FR-11: the second press works
+                CheckAnswer.NO, "the camera saw no change after the press"
             ),
             (names["Kitchen light"], Channel.ARM): Outcome(
                 CheckAnswer.UNSURE, "the camera could not tell whether the light went off", times=2

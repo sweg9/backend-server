@@ -8,6 +8,7 @@ the link; a scenario (scenario.py) gives fixed ones. Rules kept whatever the ans
 
 - Wireless first, then the press, and only after wireless failed or when there is none (C-09, L-05).
 - The press only after the gate passed right before it (C-04).
+- A failed check after a press leads to one more press after a new gate, at most 2 presses (FR-11, L-04).
 - `unsure` is looked at once more without pressing again, then stays unsure; the resident chooses retry
   or leave (FR-08, FR-11).
 - The emergency stop turns the hand off first, then cancels everything open, a move order too (FR-10).
@@ -28,7 +29,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
 from backend.common.ids import new_id
-from backend.common.runlog import RunEntry
+from backend.common.runlog import MAX_ARM_ATTEMPTS, RunEntry
 from backend.common.vocab import (
     Channel,
     CheckAnswer,
@@ -580,49 +581,69 @@ class Orchestrator:
         await self.move_to(v["spot_id"])
         if self.robot.plan and self.robot.plan[0] == v["spot_id"]:
             self.robot.plan.pop(0)
-        await status("pressing")
-        self.robot.state = "pressing"
-        await self.set_task(Step.GATE, "safety gate: no person in the work area", Stage.S6, ctx, Channel.ARM)
-        ok, why = await self.answers.gate(ctx.device_id)
-        await self.wait(1.0)
-        await self.progress(
-            ctx,
-            Step.GATE,
-            "safety gate passed" if ok else f"safety gate failed: {why}",
-            Stage.S6,
-            Channel.ARM,
-            gate="pass" if ok else "fail",
-            reason=None if ok else why,
-        )
-        if not ok:  # C-04: no press
-            ctx.stages.append({"stage": Stage.S6, "status": "skipped", "latency_ms": 0, "reason": why})
-            await self.close(ctx, RunResult.CANCELLED, why)
-            await status("cancelled")
-            return
-        t = now()
-        await self.set_task(Step.PRESS, "press", Stage.S6, ctx, Channel.ARM)
-        await self.ral.press(self.actuator, PUSH_MS)
-        await self.ral.release(self.actuator)
-        self.robot.state = "checking"
-        await status("checking")
-        await self.set_task(Step.CHECK, "check the effect with the camera", Stage.S6, ctx, Channel.ARM)
-        await self.wait(self.effect_wait_s)
-        answer, why = await self.answers.verify(ctx.device_id, Channel.ARM, ctx.action, None)
-        if answer == CheckAnswer.UNSURE:  # FR-08: one more look, never another press
-            await self.progress(ctx, Step.CHECK, "unsure", Stage.S6, Channel.ARM, answer=answer, reason=why)
-            await self.set_task(Step.CHECK, "unsure: look once more without pressing again", Stage.S6, ctx, Channel.ARM)
-            await self.wait(self.unsure_recheck_s)
+        # FR-11: a failed check (`no`) leads to one more press, after a new gate; at most MAX_ARM_ATTEMPTS
+        # presses (L-04). `unsure` is looked at once more and never pressed again (FR-08).
+        for n in range(1, MAX_ARM_ATTEMPTS + 1):
+            again = n > 1
+            await status("pressing")
+            self.robot.state = "pressing"
+            await self.set_task(
+                Step.GATE,
+                "safety gate before the second press" if again else "safety gate: no person in the work area",
+                Stage.S6,
+                ctx,
+                Channel.ARM,
+            )
+            ok, why = await self.answers.gate(ctx.device_id)
+            await self.wait(1.0)
+            await self.progress(
+                ctx,
+                Step.GATE,
+                "safety gate passed" if ok else f"safety gate failed: {why}",
+                Stage.S6,
+                Channel.ARM,
+                gate="pass" if ok else "fail",
+                reason=None if ok else why,
+            )
+            if not ok:  # C-04: no press
+                ctx.stages.append({"stage": Stage.S6, "status": "skipped", "latency_ms": 0, "reason": why})
+                await self.close(ctx, RunResult.CANCELLED, why)
+                await status("cancelled")
+                return
+            t = now()
+            await self.set_task(Step.PRESS, "press again" if again else "press", Stage.S6, ctx, Channel.ARM)
+            await self.ral.press(self.actuator, PUSH_MS)
+            await self.ral.release(self.actuator)
+            self.robot.state = "checking"
+            await status("checking")
+            await self.set_task(Step.CHECK, "check the effect with the camera", Stage.S6, ctx, Channel.ARM)
+            await self.wait(self.effect_wait_s)
             answer, why = await self.answers.verify(ctx.device_id, Channel.ARM, ctx.action, None)
-        await self.progress(
-            ctx,
-            Step.CHECK,
-            {CheckAnswer.YES: "it worked", CheckAnswer.NO: "it did not work"}.get(answer, "still unsure"),
-            Stage.S6,
-            Channel.ARM,
-            answer=answer,
-            reason=None if answer == CheckAnswer.YES else why,
-        )
-        self.attempt(ctx, Channel.ARM, answer, int((now() - t).total_seconds() * 1000), why)
+            if answer == CheckAnswer.UNSURE:  # FR-08: one more look, never another press
+                await self.progress(ctx, Step.CHECK, "unsure", Stage.S6, Channel.ARM, answer=answer, reason=why)
+                await self.set_task(
+                    Step.CHECK, "unsure: look once more without pressing again", Stage.S6, ctx, Channel.ARM
+                )
+                await self.wait(self.unsure_recheck_s)
+                answer, why = await self.answers.verify(ctx.device_id, Channel.ARM, ctx.action, None)
+            more = answer == CheckAnswer.NO and n < MAX_ARM_ATTEMPTS
+            await self.progress(
+                ctx,
+                Step.CHECK,
+                {
+                    CheckAnswer.YES: "it worked",
+                    CheckAnswer.NO: "it did not work: press once more" if more else "it did not work",
+                }.get(answer, "still unsure"),
+                Stage.S6,
+                Channel.ARM,
+                answer=answer,
+                reason=None if answer == CheckAnswer.YES else why,
+            )
+            self.attempt(ctx, Channel.ARM, answer, int((now() - t).total_seconds() * 1000), why)
+            if not more:
+                break
+        if answer == CheckAnswer.NO and n > 1:
+            why = f"pressed twice: {why or 'the check saw no change'}"
         result = {CheckAnswer.YES: RunResult.SUCCESS, CheckAnswer.NO: RunResult.FAILURE}.get(answer, RunResult.UNSURE)
         await self.close(ctx, result, why)
         await status("done" if result == RunResult.SUCCESS else "failed")
