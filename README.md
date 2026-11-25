@@ -6,8 +6,8 @@ Since the 2026-11-20 meeting the server runs on AWS and the hub at home:
 
 | Mode | Runs as | Does |
 |---|---|---|
-| `hub` | `uv run backend hub` on a laptop at home (it needs the USB webcam and the Arduino) | Reader (photos from the robot), the records in SQLite, Safety Guard, Dashboard (Streamlit), channel adapters, the hand through the RAL |
-| `server` | A pod on k3s on one AWS EC2 instance | Relays the web app's calls to the hub and the hub's requests to the enclave, puts sealed photos in S3, monitoring. No database |
+| `hub` | `uv run backend hub` on a laptop at home (it needs the USB webcam and the Arduino) | Reader (photos from the robot), Encryption (seals each photo), the records in SQLite, Safety Guard, Streamlit (read-only screen), channel adapters, the hand through the RAL |
+| `server` | A pod on k3s on one AWS EC2 instance | Relays the Dashboard's calls to the hub and the hub's requests to the enclave, puts sealed photos in S3, monitoring. No database |
 
 The models (`ai-engine`: YOLO11n, Linker, MobileNet) and the autonomy policy run in a Nitro Enclave on the same EC2 instance, reached over vsock.
 - No video leaves the home. The hub seals each single photo a step needs before it leaves the home.
@@ -38,7 +38,7 @@ uv run ruff check . && uv run ruff format --check .
 uv run backend hash-password               # prints the value for APP_PASSWORD_HASH
 ```
 
-The server and the hub on one machine, with the demo home (for the web app's development):
+The server and the hub on one machine, with the demo home (for the Dashboard's development):
 
 ```bash
 export HUB_TOKEN=dev APP_PASSWORD_HASH='<from hash-password>'
@@ -49,7 +49,7 @@ uv run backend hub --stdout --demo-scenarios --server-url ws://127.0.0.1:8000/ws
 
 With `--demo-scenarios`, `POST /scenarios/leave_home/start` (demo scenario 3) or `new_control` (scenario 1) plays fixed answers through the real orchestrator; watch it on `/ws/app`. Without the flag those routes answer 404.
 
-The session cookie is `Secure` and `SameSite=Strict`, so the web app calls the server through its dev server's proxy (for Vite: `server.proxy` sends `/api` to `http://127.0.0.1:8000` and strips `/api`, like the ingress). Browsers accept `Secure` cookies on `http://localhost`.
+The session cookie is `Secure` and `SameSite=Strict`, so the Dashboard calls the server through its dev server's proxy (for Vite: `server.proxy` sends `/api` to `http://127.0.0.1:8000` and strips `/api`, like the ingress). Browsers accept `Secure` cookies on `http://localhost`.
 
 The same pair runs on a shared dev instance on AWS, kept stopped when unused: [`deploy/dev-ec2/`](deploy/dev-ec2/README.md).
 
