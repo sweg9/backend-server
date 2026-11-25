@@ -14,7 +14,12 @@ from backend.server.hub_gateway import HubGateway, HubOffline
 
 class ApiError(HTTPException):
     def __init__(self, status: int, code: str, message: str, reason: str | None = None):
-        super().__init__(status, {"code": code, "message": message, "reason": reason})
+        body = (
+            {"code": code, "message": message}
+            if reason is None
+            else {"code": code, "message": message, "reason": reason}
+        )
+        super().__init__(status, body)  # spec Error: reason is a string or absent
 
 
 def hub_offline(e: HubOffline) -> ApiError:

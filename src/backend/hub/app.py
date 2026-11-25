@@ -62,7 +62,12 @@ def token_hash(token: str) -> str:
 
 class ApiError(Exception):
     def __init__(self, status: int, code: str, message: str, reason: str | None = None):
-        self.response = AppResponse(status=status, body={"code": code, "message": message, "reason": reason})
+        body = (
+            {"code": code, "message": message}
+            if reason is None
+            else {"code": code, "message": message, "reason": reason}
+        )
+        self.response = AppResponse(status=status, body=body)  # spec Error: reason is a string or absent
 
 
 # --- request bodies of the spec ----------------------------------------------------------------

@@ -30,6 +30,16 @@ def test_errors_use_the_one_shape():
     assert set(r.json()) == {"code", "message", "reason"}
 
 
+def test_an_error_without_a_reason_leaves_it_out():
+    """Error.reason is a string or absent, never null: the Dashboard's types come from the spec."""
+    from backend.hub.app import ApiError as HubError
+    from backend.server.api.common import ApiError as ServerError
+
+    assert HubError(409, "already_chosen", "x").response.body == {"code": "already_chosen", "message": "x"}
+    assert ServerError(409, "c", "x").detail == {"code": "c", "message": "x"}
+    assert HubError(503, "c", "x", "why").response.body["reason"] == "why"
+
+
 def test_healthz_is_outside_the_spec():
     r = TestClient(create_app()).get("/healthz")
     assert r.status_code == 200
