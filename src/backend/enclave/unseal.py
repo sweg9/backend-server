@@ -21,6 +21,7 @@ from backend.common.messages import Sealed
 from backend.common.sealing import KEY_BYTES, NONCE_BYTES, TAG_BYTES, SealError, associated_data
 
 KMSTOOL = "/app/kmstool_enclave_cli"  # where the enclave image puts it
+KMSTOOL_TIMEOUT_S = 10  # one Decrypt through the vsock proxy; past it the step goes on the safe side
 
 
 class KeyOpener(Protocol):
@@ -41,6 +42,8 @@ class KmstoolKeys:
 
     def open_key(self, wrapped: bytes) -> bytes:
         key_id, secret, token = self.credentials()
+        # The temporary credentials go to kmstool as command-line arguments. That is fine only inside the
+        # enclave, where nothing else runs and nobody can list processes; never copy this to the parent.
         cmd = [
             self.tool, "decrypt",
             "--region", self.region,
@@ -50,7 +53,14 @@ class KmstoolKeys:
             "--aws-session-token", token,
             "--ciphertext", base64.b64encode(wrapped).decode(),
         ]  # fmt: skip
-        out = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        try:
+            out = subprocess.run(cmd, capture_output=True, text=True, timeout=KMSTOOL_TIMEOUT_S)
+        except subprocess.TimeoutExpired:
+            raise SealError("KMS did not answer") from None
+        except FileNotFoundError:
+            raise SealError("kmstool is missing") from None
+        except OSError:
+            raise SealError("kmstool could not run") from None
         if out.returncode != 0:
             raise SealError("KMS did not open the data key for this enclave")
         for line in out.stdout.splitlines():

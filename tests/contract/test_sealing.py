@@ -4,6 +4,7 @@ fake KMS in place of AWS."""
 
 import base64
 import os
+import subprocess
 
 import cv2
 import numpy as np
@@ -11,6 +12,7 @@ import pytest
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
+from backend.common.ids import new_id
 from backend.common.messages import Sealed
 from backend.common.sealing import SealError
 from backend.common.settings import HubSettings, load
@@ -18,6 +20,7 @@ from backend.enclave.unseal import KmstoolKeys, opener, unseal
 from backend.hub.seal import KmsDataKeys, data_keys, seal
 
 W, H = 80, 60
+PID = new_id("ph")  # photo ids are ph_<ULID>
 
 
 class FakeKms:
@@ -51,7 +54,7 @@ def photo(w=W, h=H):
     return jpeg.tobytes()
 
 
-def sealed_photo(kms, pid="ph-test-1", w=W, h=H):
+def sealed_photo(kms, pid=PID, w=W, h=H):
     return seal(photo(w, h), photo_id=pid, w=w, h=h, keys=kms)
 
 
@@ -66,7 +69,7 @@ def test_round_trip_hub_to_enclave():
 def test_what_leaves_the_home_is_only_ciphertext():
     kms = FakeKms()
     jpeg = photo()
-    s = seal(jpeg, photo_id="ph-test-1", w=W, h=H, keys=kms)
+    s = seal(jpeg, photo_id=PID, w=W, h=H, keys=kms)
     data = base64.b64decode(s.data)
     assert jpeg not in data and not data.startswith(b"\xff\xd8")
     assert "/9j/" not in s.model_dump_json()  # no base64 JPEG anywhere in the message
@@ -82,7 +85,7 @@ def test_every_photo_has_its_own_key_and_nonce():
 @pytest.mark.parametrize(
     "change",
     [
-        lambda s: s.model_copy(update={"photo_id": "ph-test-2"}),  # moved under another id
+        lambda s: s.model_copy(update={"photo_id": new_id("ph")}),  # moved under another id
         lambda s: s.model_copy(update={"w": W + 1}),  # claimed another size
         lambda s: s.model_copy(
             update={
@@ -112,7 +115,7 @@ def test_another_key_or_another_enclave_image_cannot_open_it():
 
 def test_the_size_must_match_the_opened_photo():
     kms = FakeKms()
-    s = seal(photo(40, 30), photo_id="ph-test-1", w=W, h=H, keys=kms)  # sealed with a wrong size
+    s = seal(photo(40, 30), photo_id=PID, w=W, h=H, keys=kms)  # sealed with a wrong size
     with pytest.raises(SealError, match="not the size"):
         opener(kms)(s)
 
@@ -185,3 +188,24 @@ def test_kmstool_reads_the_plain_key_and_reports_a_refusal(monkeypatch):
 def test_sealed_is_the_hub_message_field():
     s = sealed_photo(FakeKms())
     assert Sealed.model_validate_json(s.model_dump_json()) == s
+
+
+@pytest.mark.parametrize(
+    ("raised", "message"),
+    [
+        (subprocess.TimeoutExpired(cmd="kmstool", timeout=10), "did not answer"),
+        (FileNotFoundError("/app/kmstool_enclave_cli"), "kmstool is missing"),
+        (PermissionError("not executable"), "could not run"),
+    ],
+    ids=["timeout", "no kmstool", "cannot run"],
+)
+def test_kmstool_failures_are_seal_errors(monkeypatch, raised, message):
+    """The safe-side path relies on SealError: a slow KMS or a missing tool must not escape as another error."""
+
+    def run(cmd, **kw):
+        raise raised
+
+    monkeypatch.setattr("backend.enclave.unseal.subprocess.run", run)
+    keys = KmstoolKeys("ap-northeast-2", 8000, lambda: ("AKIA", "secret", "token"))
+    with pytest.raises(SealError, match=message):
+        keys.open_key(b"wrapped")
