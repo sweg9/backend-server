@@ -46,7 +46,7 @@ kubectl create secret generic grafana -n logging --from-literal=GRAFANA_ADMIN_PA
 kubectl create secret generic loki-push -n logging --from-literal=users='hub:<htpasswd hash>'
 kubectl create secret tls nova-tls -n sweg9 --cert=... --key=...      # and the same in logging
 kubectl create configmap server-settings -n sweg9 --from-file=settings/server.yaml
-kubectl create configmap enclave-settings -n sweg9 --from-file=settings/risk.yaml
+kubectl create configmap enclave-settings -n sweg9 --from-file=settings/risk.yaml --from-file=settings/enclave.yaml
 kubectl apply -k deploy/k8s
 ```
 

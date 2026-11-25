@@ -27,6 +27,7 @@ spec:
               exec sleep infinity
           volumeMounts:
             - {name: risk, mountPath: /enclave/risk.yaml, subPath: risk.yaml}   # sent to the enclave over vsock at start
+            - {name: risk, mountPath: /enclave/enclave.yaml, subPath: enclave.yaml}   # the same
           resources:
             limits:
               aws.ec2.nitro/nitro_enclaves: "1"

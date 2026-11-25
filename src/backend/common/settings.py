@@ -90,6 +90,12 @@ class ServerSettings(Strict):
     login_window_s: float
 
 
+class EnclaveSettings(Strict):
+    """settings/enclave.yaml: the enclave program's limits, passed to it over vsock at start."""
+
+    kmstool_timeout_s: float  # C-05: one KMS Decrypt
+
+
 class RiskSettings(Strict):
     """settings/risk.yaml: the autonomy policy, passed to the enclave (FR-06)."""
 

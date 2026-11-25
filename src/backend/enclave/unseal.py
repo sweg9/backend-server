@@ -21,7 +21,6 @@ from backend.common.messages import Sealed
 from backend.common.sealing import KEY_BYTES, NONCE_BYTES, TAG_BYTES, SealError, associated_data
 
 KMSTOOL = "/app/kmstool_enclave_cli"  # where the enclave image puts it
-KMSTOOL_TIMEOUT_S = 10  # one Decrypt through the vsock proxy; past it the step goes on the safe side
 
 
 class KeyOpener(Protocol):
@@ -32,12 +31,21 @@ class KeyOpener(Protocol):
 
 class KmstoolKeys:
     """KMS Decrypt with the enclave's attestation, through kmstool_enclave_cli. `credentials` returns
-    the temporary AWS credentials the parent hands over vsock: (access key id, secret, session token)."""
+    the temporary AWS credentials the parent hands over vsock: (access key id, secret, session token).
+    `timeout_s` is `kmstool_timeout_s` of settings/enclave.yaml; past it the step goes on the safe side."""
 
-    def __init__(self, region: str, proxy_port: int, credentials: Callable[[], tuple[str, str, str]], tool=KMSTOOL):
+    def __init__(
+        self,
+        region: str,
+        proxy_port: int,
+        credentials: Callable[[], tuple[str, str, str]],
+        timeout_s: float,
+        tool=KMSTOOL,
+    ):
         self.region = region
         self.proxy_port = proxy_port
         self.credentials = credentials
+        self.timeout_s = timeout_s
         self.tool = tool
 
     def open_key(self, wrapped: bytes) -> bytes:
@@ -54,7 +62,7 @@ class KmstoolKeys:
             "--ciphertext", base64.b64encode(wrapped).decode(),
         ]  # fmt: skip
         try:
-            out = subprocess.run(cmd, capture_output=True, text=True, timeout=KMSTOOL_TIMEOUT_S)
+            out = subprocess.run(cmd, capture_output=True, text=True, timeout=self.timeout_s)
         except subprocess.TimeoutExpired:
             raise SealError("KMS did not answer") from None
         except FileNotFoundError:

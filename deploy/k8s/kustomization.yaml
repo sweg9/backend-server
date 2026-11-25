@@ -1,7 +1,7 @@
 # kubectl apply -k deploy/k8s, on the EC2 instance (deploy/README.md).
 # Made outside this folder, never committed (C-10): the Secrets `app` (HUB_TOKEN), `grafana`, `loki-push`
 # and the TLS Secret `nova-tls`; the ConfigMaps `server-settings` (settings/server.yaml) and
-# `enclave-settings` (settings/risk.yaml).
+# `enclave-settings` (settings/risk.yaml and settings/enclave.yaml).
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:

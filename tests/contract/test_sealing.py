@@ -15,11 +15,12 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from backend.common.ids import new_id
 from backend.common.messages import Sealed
 from backend.common.sealing import SealError
-from backend.common.settings import HubSettings, load
+from backend.common.settings import EnclaveSettings, HubSettings, load
 from backend.enclave.unseal import KmstoolKeys, opener, unseal
 from backend.hub.seal import KmsDataKeys, data_keys, seal
 
 W, H = 80, 60
+ENCLAVE = load(EnclaveSettings, "enclave.yaml")
 PID = new_id("ph")  # photo ids are ph_<ULID>
 
 
@@ -172,13 +173,14 @@ def test_kmstool_reads_the_plain_key_and_reports_a_refusal(monkeypatch):
             self.returncode, self.stdout = code, out
 
     def run(cmd, **kw):
-        seen["cmd"] = cmd
+        seen["cmd"], seen["timeout"] = cmd, kw.get("timeout")
         return Done(0, "PLAINTEXT: " + base64.b64encode(b"k" * 32).decode() + "\n")
 
     monkeypatch.setattr("backend.enclave.unseal.subprocess.run", run)
-    keys = KmstoolKeys("ap-northeast-2", 8000, lambda: ("AKIA", "secret", "token"))
+    keys = KmstoolKeys("ap-northeast-2", 8000, lambda: ("AKIA", "secret", "token"), ENCLAVE.kmstool_timeout_s)
     assert keys.open_key(b"wrapped") == b"k" * 32
     assert seen["cmd"][1] == "decrypt" and "--ciphertext" in seen["cmd"]
+    assert seen["timeout"] == ENCLAVE.kmstool_timeout_s  # C-12: from settings/enclave.yaml
 
     monkeypatch.setattr("backend.enclave.unseal.subprocess.run", lambda cmd, **kw: Done(1, ""))
     with pytest.raises(SealError, match="did not open"):
@@ -206,6 +208,6 @@ def test_kmstool_failures_are_seal_errors(monkeypatch, raised, message):
         raise raised
 
     monkeypatch.setattr("backend.enclave.unseal.subprocess.run", run)
-    keys = KmstoolKeys("ap-northeast-2", 8000, lambda: ("AKIA", "secret", "token"))
+    keys = KmstoolKeys("ap-northeast-2", 8000, lambda: ("AKIA", "secret", "token"), ENCLAVE.kmstool_timeout_s)
     with pytest.raises(SealError, match=message):
         keys.open_key(b"wrapped")
