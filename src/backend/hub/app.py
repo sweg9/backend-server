@@ -36,14 +36,15 @@ from backend.hub.db.models import (
     Mapping,
     Routine,
     Run,
+    RunChoice,
     Session,
     Situation,
 )
-from backend.hub.orchestrator import Busy, Orchestrator
-from backend.hub.prefs import PROACTIVE_KEY
+from backend.hub.orchestrator import HOME_SPOT, Busy, Orchestrator
+from backend.hub.prefs import PROACTIVE_KEY, proactive
 from backend.hub.scenario import SCENARIOS
 from backend.hub.scenario import start as start_scenario
-from backend.hub.views import control_view, device_view, iso, mapping_view, routine_view, run_view, situation_view
+from backend.hub.views import control_view, device_view, iso, mapping_view, routine_view, run_views, situation_view
 
 log = logging.getLogger(__name__)
 Emit = Callable[[str, dict[str, Any]], Awaitable[None]]
@@ -98,6 +99,10 @@ class ProactiveSetting(Body):
     paused: bool
 
 
+class RouteOrder(Body):
+    stops: list[str] = Field(min_length=1, max_length=10)
+
+
 # --- the handlers ------------------------------------------------------------------------------
 
 Handler = Callable[[Db, AppRequest, dict[str, str]], Awaitable[AppResponse]]
@@ -138,6 +143,7 @@ class AppHandlers:
         r("POST", "/routines/{routine_id}/feedback", self.routine_feedback)
         r("GET", "/runs", self.runs)
         r("POST", "/stop", self.stop)
+        r("GET", "/proactive", self.get_proactive)
         r("PUT", "/proactive", self.set_proactive)
         r("GET", "/situations", self.situations)
         r("GET", "/situations/{situation_id}", self.situation)
@@ -145,6 +151,7 @@ class AppHandlers:
         r("POST", "/situations/{situation_id}/dismiss", self.dismiss)
         r("GET", "/visits", self.visits)
         r("GET", "/robot", self.robot)
+        r("POST", "/robot/route", self.route)
         r("POST", "/runs/{run_id}/retry", self.retry)
         r("POST", "/runs/{run_id}/leave", self.leave)
         r("GET", "/scenarios", self.scenarios)
@@ -353,11 +360,14 @@ class AppHandlers:
             if limit < 1:
                 raise ApiError(422, "invalid", "limit is 1 or more")
             q = q.limit(limit)
-        return AppResponse(status=200, body=[run_view(r) for r in db.scalars(q)])
+        return AppResponse(status=200, body=run_views(db, list(db.scalars(q))))
 
     async def stop(self, _db, _req, _p) -> AppResponse:
         """Only the session check: the server sends `stop` right after this answer (FR-10)."""
         return AppResponse(status=200, body={})
+
+    async def get_proactive(self, db: Db, _req, _p) -> AppResponse:
+        return AppResponse(status=200, body=proactive(db))
 
     async def set_proactive(self, db: Db, req: AppRequest, _p) -> AppResponse:
         body = ProactiveSetting.model_validate(req.body or {})
@@ -410,9 +420,38 @@ class AppHandlers:
     async def robot(self, _db, _req, _p) -> AppResponse:
         return AppResponse(status=200, body=self._orch().robot.view())
 
+    def _spot_of(self, db: Db, stop: str) -> str:
+        """A stop is a spot id, a control id (its press spot) or a device id (the press spot of the control
+        its Verified mapping runs, C-08)."""
+        c = db.get(Control, stop)
+        if c is None and db.get(Device, stop) is not None:
+            m = db.scalar(select(Mapping).where(Mapping.device_id == stop, Mapping.status == MappingStatus.VERIFIED))
+            if m is None:
+                raise ApiError(409, "not_verified", f"{stop} has no Verified mapping")
+            c = db.get(Control, m.control_id)
+        if c is not None:
+            if not c.press_spot_id:
+                raise ApiError(409, "no_press_spot", f"{c.control_id} has no press spot yet")
+            return c.press_spot_id
+        rows = db.execute(select(Control.seen_spot_id, Control.press_spot_id))
+        known = {HOME_SPOT} | {x for row in rows for x in row if x}
+        if stop in known:
+            return stop
+        raise ApiError(404, "unknown_stop", f"Unknown stop: {stop}")
+
+    async def route(self, db: Db, req: AppRequest, _p) -> AppResponse:
+        body = RouteOrder.model_validate(req.body or {})
+        orch = self._orch()
+        spots = [self._spot_of(db, s) for s in body.stops]
+        try:
+            order = orch.start_route(spots)
+        except Busy as e:
+            raise ApiError(409, "robot_busy", "The robot is busy", str(e)) from e
+        return AppResponse(status=202, body={"route_id": order["route_id"], "stops": spots})
+
     # --- after a failure, the resident chooses (C-09) ---------------------------------------------
 
-    def _failed(self, run_id: str):
+    def _failed(self, db: Db, run_id: str):
         orch = self._orch()
         try:
             run, sit = orch.settled_run(run_id)
@@ -420,31 +459,33 @@ class AppHandlers:
             raise ApiError(404, "unknown_run", "Unknown run") from e
         if run.result == RunResult.SUCCESS:
             raise ApiError(409, "not_failed", "Only a failed, unsure or cancelled run can be retried or left")
-        item = next((i for i in (sit or {}).get("plan", []) if i["run_id"] == run_id), None)
-        if run_id in orch.resolved or (item is not None and item.get("resolution")):
+        if db.get(RunChoice, run_id) is not None:
             raise ApiError(409, "already_chosen", "The resident already chose for this run")
+        item = next((i for i in (sit or {}).get("plan", []) if i["run_id"] == run_id), None)
         return orch, run, sit, item
 
-    async def retry(self, _db, _req, p) -> AppResponse:
-        orch, run, sit, item = self._failed(p["run_id"])
+    async def retry(self, db: Db, _req, p) -> AppResponse:
+        orch, run, sit, item = self._failed(db, p["run_id"])
         try:
-            orch.start("retry", lambda: orch.retry(run, sit))
+            ctx = orch.start_retry(run, sit)
         except Busy as e:
             raise ApiError(409, "robot_busy", "The robot is busy", str(e)) from e
-        orch.resolved.add(run.run_id)
+        if ctx is None:
+            raise ApiError(409, "not_verified", "The mapping is no longer Verified, so it cannot be tried again")
+        db.add(RunChoice(run_id=run.run_id, choice="retry", retry_run_id=ctx.run_id, chosen_at=now()))
         if item is not None:
             item["resolution"] = "retry"
-        return AppResponse(status=202, body={"run_id": run.run_id, "choice": "retry"})
+        return AppResponse(status=202, body={"run_id": run.run_id, "choice": "retry", "retry_run_id": ctx.run_id})
 
-    async def leave(self, _db, _req, p) -> AppResponse:
-        orch, run, sit, item = self._failed(p["run_id"])
-        orch.resolved.add(run.run_id)
+    async def leave(self, db: Db, _req, p) -> AppResponse:
+        orch, run, sit, item = self._failed(db, p["run_id"])
+        db.add(RunChoice(run_id=run.run_id, choice="leave", retry_run_id=None, chosen_at=now()))
         if item is not None:
             item["resolution"] = "leave"
         task = asyncio.create_task(orch.leave(run, sit))
         self._background.add(task)
         task.add_done_callback(self._background.discard)
-        return AppResponse(status=200, body={"run_id": run.run_id, "choice": "leave"})
+        return AppResponse(status=200, body={"run_id": run.run_id, "choice": "leave", "retry_run_id": None})
 
     # --- demo scenarios (scenario.py) ------------------------------------------------------------
 

@@ -31,6 +31,12 @@ async def stop(request: Request):
     return {"ral": done.ral}
 
 
+@router.get("/proactive")
+async def get_proactive(request: Request):
+    """FR-06. Relayed to the hub."""
+    return await relay(request)
+
+
 @router.put("/proactive")
 async def set_proactive(request: Request):
     """FR-06. Relayed to the hub."""

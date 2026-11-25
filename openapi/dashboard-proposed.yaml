@@ -8,7 +8,10 @@ info:
     route moves into backend-server.yaml (and the server and hub) when the team adopts it, maybe changed.
     Same session cookie and Error shape as the team spec. Adopted in 0.4.0 and gone from here: situations,
     visits, GET /robot (without position, heading_deg, path and camera, which stay proposed here with the
-    map), retry and leave, and the live kinds situation, visits and robot.
+    map), retry and leave, and the live kinds situation, visits and robot. Adopted in 0.5.0 (with the dashboard's own
+    proposal, live-demo docs/proposed-api.md) and gone from here: GET /proactive (without ask_before_act),
+    the move order as POST /robot/route with the live kind robot.route, and the fields of run.progress and
+    notification.
 servers:
   - url: http://localhost:8000
 security:
@@ -40,45 +43,20 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Status' }
   /proactive:
-    get:
+    put:
       tags: [Status]
-      summary: Read the proactive setting (the team spec has only PUT)
+      summary: The team spec's PUT /proactive gains the optional field ask_before_act
       x-requirements: [FR-06]
-      x-note: PUT /proactive in the team spec gains the optional field ask_before_act.
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProactiveSetting' }
       responses:
         '200':
           description: Setting
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ProactiveSetting' }
-  /robot/goto:
-    post:
-      tags: [Robot]
-      summary: Send the robot to one place, or through several in order ("go here", "stop by here, then there")
-      description: Each stop is a spot_id, a control_id (its press spot) or a device_id (the press spot of its Verified control). Moving only; nothing is pressed. The safety gate still applies on the real hub.
-      x-requirements: [FR-09, FR-10]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [stops]
-              properties:
-                stops: { type: array, minItems: 1, items: { type: string } }
-      responses:
-        '202':
-          description: Started
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [stops, route]
-                properties:
-                  stops: { type: array, items: { type: string }, description: Resolved spot ids }
-                  route: { type: array, items: { type: string }, description: Every spot on the way, in order }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '409': { $ref: '#/components/responses/Conflict' }
   /map:
     get:
       tags: [Map]
@@ -160,9 +138,6 @@ x-websocket:
       link_guess: {device_id, device_class, label, p}, caution, caution_reason}],
       check (status checked): {change, device_type, device_box, device_id, confidence, reason}, guess, guess_right}.
       Same fields as recognize.result in Hub messages, plus link_guess.device_id/label and caution.
-    run.progress: '{run_id, situation_id, device_id, stage, step, method: wireless|press, channel}'
-    run.result: Run (team shape)
-    notification: '{level: info|warning, topic, message, at, choices?: [retry, leave] | [approve, dismiss], run_id?, situation_id?}'
     mapping: Mapping (team shape), plus previous_device_id when a wrong guess was fixed
 components:
   securitySchemes:
@@ -358,7 +333,7 @@ components:
         routine_id: { type: [string, 'null'] }
         resolution:
           type: [object, 'null']
-          properties: { choice: { type: string, enum: [retry, leave] }, run_id: { type: [string, 'null'] } }
+          properties: { choice: { type: string, enum: [retry, leave] }, retry_run_id: { type: [string, 'null'] } }
     Choice:
       type: object
       properties: { run_id: { type: string }, choice: { type: string, enum: [retry, leave] } }

@@ -263,3 +263,163 @@ def test_without_scenario_answers_the_hub_only_suggests():
         assert Channel.ARM not in [c[0] for c in h.ral.calls]
 
     asyncio.run(go())
+
+
+# --- API 0.5.0: the dashboard's proposal merged ---------------------------------------------------
+
+
+async def kitchen_failed(h):
+    await h.play("leave_home")
+    h.orch.speed = 1000
+    return plan_by_name((await h.call("GET", "/situations")).body[0])["Kitchen light"]["run_id"]
+
+
+@pytest.mark.fr("FR-11")
+@pytest.mark.fr("FR-12")
+def test_retry_answers_the_new_run_and_the_choice_stays_with_the_runs():
+    async def go():
+        h = Hub()
+        kitchen = await kitchen_failed(h)
+        r = await h.call("POST", f"/runs/{kitchen}/retry")
+        assert r.status == 202 and r.body["choice"] == "retry"
+        new = r.body["retry_run_id"]
+        await h.orch.task
+        runs = {x["run_id"]: x for x in (await h.call("GET", "/runs")).body}
+        assert runs[kitchen]["resolution"] == {"choice": "retry", "retry_run_id": new}
+        assert runs[new]["retry_of"] == kitchen and runs[new]["resolution"] is None
+        assert runs[new]["situation_id"] == runs[kitchen]["situation_id"] is not None
+        result = [d for k, d in h.events if k == "run.result" and d["run_id"] == new]
+        assert result and result[0]["retry_of"] == kitchen
+        assert "because you asked me to try again" in result[0]["explanation"]  # C-07: not "your routine"
+        # the choice is in the database, not only in the orchestrator's memory: a restarted hub still refuses
+        h.orch.situations.clear()
+        assert (await h.call("POST", f"/runs/{kitchen}/leave")).body["code"] == "already_chosen"
+
+    asyncio.run(go())
+
+
+@pytest.mark.fr("FR-11")
+def test_retry_without_a_verified_mapping_is_refused_at_once():
+    async def go():
+        h = Hub()
+        kitchen = await kitchen_failed(h)
+        with h.db() as s:
+            s.scalar(select(Mapping).where(Mapping.device_id == s.get(Run, kitchen).device_id)).status = "Rejected"
+            s.commit()
+        r = await h.call("POST", f"/runs/{kitchen}/retry")
+        assert (r.status, r.body["code"]) == (409, "not_verified")
+        assert not h.orch.busy
+        assert (await h.call("POST", f"/runs/{kitchen}/leave")).status == 200  # nothing was chosen yet
+
+    asyncio.run(go())
+
+
+@pytest.mark.fr("FR-08")
+@pytest.mark.fr("FR-10")
+def test_run_progress_has_step_codes_and_outcomes_before_the_robot_event():
+    async def go():
+        h = Hub()
+        await h.play("leave_home")
+        progress = [d for k, d in h.events if k == "run.progress"]
+        assert {p["step"] for p in progress} == {"decide", "wireless", "queued", "move", "gate", "press", "check"}
+        assert {p["wireless"] for p in progress if "wireless" in p} == {"success", "failure", "no_channel"}
+        assert {p["gate"] for p in progress if p["step"] == "gate" and "gate" in p} == {"pass"}
+        assert {"yes", "unsure"} <= {p["answer"] for p in progress if p["step"] == "check" and "answer" in p}
+        assert all(p["text"] for p in progress)
+        # the robot never shows a newer step than the run
+        for n, (k, d) in enumerate(h.events):
+            if k == "robot" and d["task"] and d["task"]["run_id"]:
+                before = [p for kk, p in h.events[:n] if kk == "run.progress" and p["run_id"] == d["task"]["run_id"]]
+                assert before and before[-1]["step"] == d["task"]["step"]
+
+    asyncio.run(go())
+
+
+@pytest.mark.fr("FR-06")
+def test_a_high_risk_device_gets_a_notification_on_every_run():
+    async def go():
+        h = Hub()
+        await h.play("leave_home")
+        heater = [r.run_id for r in h.runs() if r.entry["risk"] == "high" and r.situation_id]
+        assert heater
+        told = {n["run_id"] for k, n in h.events if k == "notification" and n.get("run_id")}
+        assert set(heater) <= told
+
+    asyncio.run(go())
+
+
+@pytest.mark.fr("FR-06")
+def test_the_proactive_setting_can_be_read():
+    async def go():
+        h = Hub()
+        await h.call("POST", "/login", {"password": "pw"})
+        assert (await h.call("GET", "/proactive")).body == {"paused": False}
+        await h.call("PUT", "/proactive", {"paused": True})
+        assert (await h.call("GET", "/proactive")).body == {"paused": True}
+
+    asyncio.run(go())
+
+
+def scripted(h):
+    from backend.hub.scenario import ScriptedAnswers
+
+    h.orch.answers = ScriptedAnswers()
+    h.orch.speed = 1000
+
+
+@pytest.mark.fr("FR-09")
+@pytest.mark.fr("FR-10")
+def test_a_move_order_goes_through_its_stops_and_presses_nothing():
+    async def go():
+        h = Hub()
+        await h.call("POST", "/login", {"password": "pw"})
+        scripted(h)
+        with h.db() as s:
+            m = s.scalar(select(Mapping).where(Mapping.status == "Verified"))
+            device, spot = m.device_id, s.get(Control, m.control_id).press_spot_id
+        r = await h.call("POST", "/robot/route", {"stops": [device, "dock"]})
+        assert r.status == 202 and r.body["stops"] == [spot, "dock"]
+        await h.orch.task
+        route = [d for k, d in h.events if k == "robot.route"]
+        assert route[0]["state"] == "moving" and route[-1] == {
+            "route_id": r.body["route_id"],
+            "stops": [spot, "dock"],
+            "reached": 2,
+            "state": "done",
+            "reason": None,
+        }
+        assert not [c for c in h.ral.calls if c[0] == "press"]
+        assert (await h.call("GET", "/robot")).body["spot_id"] == "dock"
+        assert (await h.call("POST", "/robot/route", {"stops": ["nowhere"]})).status == 404
+        with h.db() as s:
+            s.get(Mapping, m.mapping_id).status = "Stale"
+            s.commit()
+        assert (await h.call("POST", "/robot/route", {"stops": [device]})).body["code"] == "not_verified"
+
+    asyncio.run(go())
+
+
+@pytest.mark.fr("FR-10")
+def test_a_move_order_waits_for_the_gate_and_the_stop_cancels_it():
+    async def go():
+        h = Hub()
+        await h.call("POST", "/login", {"password": "pw"})
+        h.orch.speed = 1000  # SafeAnswers: no gate answer, so no movement (C-04)
+        r = await h.call("POST", "/robot/route", {"stops": ["dock", "kitchen_wall_1"]})
+        await h.orch.task
+        last = [d for k, d in h.events if k == "robot.route"][-1]
+        assert (last["state"], last["reached"]) == ("cancelled", 0) and "safety gate" in last["reason"]
+        assert ("go_to_spot", "kitchen_wall_1") not in h.ral.calls
+
+        scripted(h)
+        h.orch.speed = 1
+        r = await h.call("POST", "/robot/route", {"stops": ["kitchen_wall_1"]})
+        for _ in range(100):
+            await asyncio.sleep(0.01)
+            if h.orch.robot.state == "moving":
+                break
+        await h.orch.stop()
+        last = [d for k, d in h.events if k == "robot.route" and d["route_id"] == r.body["route_id"]][-1]
+        assert (last["state"], last["reason"]) == ("cancelled", "emergency stop")
+
+    asyncio.run(go())

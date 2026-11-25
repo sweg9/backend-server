@@ -17,7 +17,15 @@ from backend.hub.explain import explain
 RESTARTED = "the hub restarted during the run"
 
 
-def write_run(db: Db, entry: RunEntry, *, ended_at: datetime, routine_id: str | None, mapping_id: str | None) -> Run:
+def write_run(
+    db: Db,
+    entry: RunEntry,
+    *,
+    ended_at: datetime,
+    routine_id: str | None,
+    mapping_id: str | None,
+    situation_id: str | None = None,
+) -> Run:
     row = Run(
         run_id=entry.run_id,
         started_at=entry.started_at,
@@ -30,6 +38,7 @@ def write_run(db: Db, entry: RunEntry, *, ended_at: datetime, routine_id: str | 
         channel=entry.channel,
         result=entry.result,
         last_crop_id=None,
+        situation_id=situation_id,
         entry=entry.model_dump(mode="json"),
     )
     db.add(row)
@@ -71,6 +80,8 @@ def end_left_open(db: Db, time_zone: str) -> int:
                 routine_time=routine.time if routine else None,
             ),
         )
-        write_run(db, entry, ended_at=now, routine_id=o.routine_id, mapping_id=o.mapping_id)
+        write_run(
+            db, entry, ended_at=now, routine_id=o.routine_id, mapping_id=o.mapping_id, situation_id=o.situation_id
+        )
     db.commit()
     return len(rows)

@@ -10,7 +10,9 @@ the link; a scenario (scenario.py) gives fixed ones. Rules kept whatever the ans
 - The press only after the gate passed right before it (C-04).
 - `unsure` is looked at once more without pressing again, then stays unsure; the resident chooses retry
   or leave (FR-08, FR-11).
-- The emergency stop turns the hand off first, then cancels everything open (FR-10).
+- The emergency stop turns the hand off first, then cancels everything open, a move order too (FR-10).
+- A move order passes the safety gate before every leg (C-04) and presses nothing.
+- A high-risk device gets a notification after every run, whatever the result (C-03).
 """
 
 import asyncio
@@ -19,6 +21,7 @@ import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any, Protocol
 
 from sqlalchemy import select
@@ -32,6 +35,7 @@ from backend.common.vocab import (
     Decision,
     DeviceAction,
     MappingStatus,
+    Risk,
     RunResult,
     Stage,
     Trigger,
@@ -56,6 +60,19 @@ class Busy(Exception):
     pass
 
 
+class Step(StrEnum):
+    """A run's steps in `run.progress` and the robot's task (API 0.5.0). S4: decide. S5: wireless.
+    S6: queued, move, gate, press, check."""
+
+    DECIDE = "decide"
+    WIRELESS = "wireless"
+    QUEUED = "queued"
+    MOVE = "move"
+    GATE = "gate"
+    PRESS = "press"
+    CHECK = "check"
+
+
 class Answers(Protocol):
     async def decide(self, item: dict[str, Any], paused: bool) -> Decision: ...
 
@@ -64,6 +81,8 @@ class Answers(Protocol):
     ) -> tuple[CheckAnswer, str | None]: ...
 
     async def gate(self, device_id: str) -> tuple[bool, str | None]: ...
+
+    async def route_gate(self, spot_id: str) -> tuple[bool, str | None]: ...
 
 
 class SafeAnswers:
@@ -77,6 +96,9 @@ class SafeAnswers:
         return CheckAnswer.UNSURE, "no check answer"
 
     async def gate(self, device_id: str) -> tuple[bool, str | None]:
+        return False, "no answer from the safety gate"
+
+    async def route_gate(self, spot_id: str) -> tuple[bool, str | None]:
         return False, "no answer from the safety gate"
 
 
@@ -121,6 +143,7 @@ class RunCtx:
     routine_id: str | None
     routine_time: str | None
     situation_id: str | None
+    retry_of: str | None = None
     started_at: datetime = field(default_factory=now)
     stages: list[dict[str, Any]] = field(default_factory=list)
     attempts: list[dict[str, Any]] = field(default_factory=list)
@@ -155,7 +178,7 @@ class Orchestrator:
         self.situations: dict[str, dict[str, Any]] = {}  # the ones still going on
         self.open: dict[str, RunCtx] = {}
         self.waiting: dict[str, asyncio.Future[bool]] = {}
-        self.resolved: set[str] = set()  # failed runs the resident already chose retry or leave for
+        self.route: dict[str, Any] | None = None  # the move order going on, as in `robot.route`
         self.task: asyncio.Task | None = None
         self.task_name: str | None = None
 
@@ -199,29 +222,44 @@ class Orchestrator:
     async def visits_event(self) -> None:
         await self.emit("visits", {"visits": self.visits})
 
-    async def set_task(self, step: str, stage: Stage | None = None, ctx: RunCtx | None = None, channel=None) -> None:
+    async def progress(
+        self, ctx: RunCtx, step: Step, text: str, stage: Stage, channel: Channel | None = None, **outcome: Any
+    ) -> None:
+        """One step of one run (`run.progress`). `outcome` holds what applies: `wireless` (success, failure,
+        no_channel), `gate` (pass, fail), `answer` (yes, no, unsure) and `reason`."""
+        method = None if channel is None else ("press" if channel == Channel.ARM else "wireless")
+        await self.emit(
+            "run.progress",
+            {
+                "run_id": ctx.run_id,
+                "situation_id": ctx.situation_id,
+                "device_id": ctx.device_id,
+                "stage": stage,
+                "step": step,
+                "text": text,
+                "method": method,
+                "channel": channel,
+                **outcome,
+            },
+        )
+
+    async def set_task(
+        self, step: Step, text: str, stage: Stage | None = None, ctx: RunCtx | None = None, channel=None
+    ) -> None:
+        """What the robot does now; for a run, its `run.progress` goes first so the robot never shows a
+        newer step than the run."""
         method = None if channel is None else ("press" if channel == Channel.ARM else "wireless")
         self.robot.task = {
             "run_id": ctx.run_id if ctx else None,
             "device_id": ctx.device_id if ctx else None,
             "stage": stage,
             "step": step,
+            "text": text,
             "method": method,
             "channel": channel,
         }
         if ctx is not None:
-            await self.emit(
-                "run.progress",
-                {
-                    "run_id": ctx.run_id,
-                    "situation_id": ctx.situation_id,
-                    "device_id": ctx.device_id,
-                    "stage": stage,
-                    "step": step,
-                    "method": method,
-                    "channel": channel,
-                },
-            )
+            await self.progress(ctx, step, text, stage, channel)
         await self.robot_event()
 
     async def move_to(self, spot: str) -> None:
@@ -372,12 +410,24 @@ class Orchestrator:
             i["run_id"] = ctxs[i["device_id"]].run_id
         await self.save_situation(sit)
         for i in act:
+            await self.progress(ctxs[i["device_id"]], Step.DECIDE, "decided to act", Stage.S4)
+        for i in act:
             ch = i["wireless"]["channel"]
             if ch is None:
                 continue
             ctx = ctxs[i["device_id"]]
             answer, why = await self.send_wireless(ctx, Channel(ch))
             i["wireless"]["result"] = "success" if answer == CheckAnswer.YES else "failure"
+            await self.progress(
+                ctx,
+                Step.WIRELESS,
+                f"{ch}: " + ("it worked" if answer == CheckAnswer.YES else "it did not work"),
+                Stage.S5,
+                Channel(ch),
+                wireless=i["wireless"]["result"],
+                answer=answer,
+                reason=None if answer == CheckAnswer.YES else why,
+            )
             if answer == CheckAnswer.YES:
                 await self.close(ctx, RunResult.SUCCESS)
             else:
@@ -395,7 +445,10 @@ class Orchestrator:
                 for ctx in group:
                     item = next(i for i in act if i["device_id"] == ctx.device_id)
                     no_channel = item["wireless"]["result"] == "no_channel"
+                    if no_channel:
+                        await self.progress(ctx, Step.WIRELESS, "no wireless channel", Stage.S5, wireless="no_channel")
                     self.add_visit(ctx, spot, "no_channel" if no_channel else "wireless_failed")
+                    await self.progress(ctx, Step.QUEUED, "waits for the robot", Stage.S6, Channel.ARM)
             self.robot.plan = [v["spot_id"] for v in self.visits if v["status"] == "waiting"]
             await self.visits_event()
             await self.robot_event()
@@ -422,7 +475,9 @@ class Orchestrator:
 
     # --- one run -------------------------------------------------------------------------------
 
-    def open_run(self, trigger: Trigger, item: dict[str, Any], situation_id: str | None) -> RunCtx:
+    def open_run(
+        self, trigger: Trigger, item: dict[str, Any], situation_id: str | None, retry_of: str | None = None
+    ) -> RunCtx:
         with self.db() as db:
             m = db.get(Mapping, item["mapping_id"])
             c = db.get(Control, m.control_id) if m else None
@@ -442,6 +497,7 @@ class Orchestrator:
                 routine_id=item.get("routine_id"),
                 routine_time=r.time if r else None,
                 situation_id=situation_id,
+                retry_of=retry_of,
             )
             ctx.stages.append({"stage": Stage.S4, "status": "ok", "latency_ms": 900})
             db.add(
@@ -458,6 +514,7 @@ class Orchestrator:
                     phase="running",
                     started_at=ctx.started_at,
                     dedup_key=f"{ctx.device_id}:{ctx.action}",
+                    situation_id=situation_id,
                 )
             )
             db.commit()
@@ -485,7 +542,7 @@ class Orchestrator:
         )
 
     async def send_wireless(self, ctx: RunCtx, channel: Channel) -> tuple[CheckAnswer, str | None]:
-        await self.set_task(f"send over {channel}", Stage.S5, ctx, channel)
+        await self.set_task(Step.WIRELESS, f"send over {channel}", Stage.S5, ctx, channel)
         t = now()
         adapter = self.adapters.get(channel)
         sent = await adapter.send(ctx.device_id, None, ctx.action) if adapter else None
@@ -519,33 +576,52 @@ class Orchestrator:
             await self.visits_event()
 
         await status("moving")
-        await self.set_task("drive to the switch", Stage.S6, ctx, Channel.ARM)
+        await self.set_task(Step.MOVE, "drive to the switch", Stage.S6, ctx, Channel.ARM)
         await self.move_to(v["spot_id"])
         if self.robot.plan and self.robot.plan[0] == v["spot_id"]:
             self.robot.plan.pop(0)
         await status("pressing")
         self.robot.state = "pressing"
-        await self.set_task("safety gate: no person in the work area", Stage.S6, ctx, Channel.ARM)
+        await self.set_task(Step.GATE, "safety gate: no person in the work area", Stage.S6, ctx, Channel.ARM)
         ok, why = await self.answers.gate(ctx.device_id)
         await self.wait(1.0)
+        await self.progress(
+            ctx,
+            Step.GATE,
+            "safety gate passed" if ok else f"safety gate failed: {why}",
+            Stage.S6,
+            Channel.ARM,
+            gate="pass" if ok else "fail",
+            reason=None if ok else why,
+        )
         if not ok:  # C-04: no press
             ctx.stages.append({"stage": Stage.S6, "status": "skipped", "latency_ms": 0, "reason": why})
             await self.close(ctx, RunResult.CANCELLED, why)
             await status("cancelled")
             return
         t = now()
-        await self.set_task("press", Stage.S6, ctx, Channel.ARM)
+        await self.set_task(Step.PRESS, "press", Stage.S6, ctx, Channel.ARM)
         await self.ral.press(self.actuator, PUSH_MS)
         await self.ral.release(self.actuator)
         self.robot.state = "checking"
         await status("checking")
-        await self.set_task("check the effect with the camera", Stage.S6, ctx, Channel.ARM)
+        await self.set_task(Step.CHECK, "check the effect with the camera", Stage.S6, ctx, Channel.ARM)
         await self.wait(self.effect_wait_s)
         answer, why = await self.answers.verify(ctx.device_id, Channel.ARM, ctx.action, None)
         if answer == CheckAnswer.UNSURE:  # FR-08: one more look, never another press
-            await self.set_task("unsure: look once more without pressing again", Stage.S6, ctx, Channel.ARM)
+            await self.progress(ctx, Step.CHECK, "unsure", Stage.S6, Channel.ARM, answer=answer, reason=why)
+            await self.set_task(Step.CHECK, "unsure: look once more without pressing again", Stage.S6, ctx, Channel.ARM)
             await self.wait(self.unsure_recheck_s)
             answer, why = await self.answers.verify(ctx.device_id, Channel.ARM, ctx.action, None)
+        await self.progress(
+            ctx,
+            Step.CHECK,
+            {CheckAnswer.YES: "it worked", CheckAnswer.NO: "it did not work"}.get(answer, "still unsure"),
+            Stage.S6,
+            Channel.ARM,
+            answer=answer,
+            reason=None if answer == CheckAnswer.YES else why,
+        )
         self.attempt(ctx, Channel.ARM, answer, int((now() - t).total_seconds() * 1000), why)
         result = {CheckAnswer.YES: RunResult.SUCCESS, CheckAnswer.NO: RunResult.FAILURE}.get(answer, RunResult.UNSURE)
         await self.close(ctx, result, why)
@@ -589,15 +665,23 @@ class Orchestrator:
                 channel=channel,
                 reason=reason,
                 routine_time=ctx.routine_time,
+                retried=ctx.retry_of is not None,
             ),
         )
         with self.db() as db:
-            row = write_run(db, entry, ended_at=now(), routine_id=ctx.routine_id, mapping_id=ctx.mapping_id)
+            row = write_run(
+                db,
+                entry,
+                ended_at=now(),
+                routine_id=ctx.routine_id,
+                mapping_id=ctx.mapping_id,
+                situation_id=ctx.situation_id,
+            )
             if result == RunResult.SUCCESS and ctx.control_id:
                 c = db.get(Control, ctx.control_id)
                 c.state, c.seen_at = ctx.action, now()
             db.commit()
-            view = run_view(row)
+            view = run_view(row, retry_of=ctx.retry_of)
         self.open.pop(ctx.run_id, None)
         sit = self.situations.get(ctx.situation_id or "")
         if sit is not None:
@@ -613,7 +697,17 @@ class Orchestrator:
                 level="warning",
                 run_id=ctx.run_id,
                 device_id=ctx.device_id,
+                situation_id=ctx.situation_id,
                 choices=["retry", "leave"],
+            )
+        elif ctx.risk == Risk.HIGH:  # C-03: a notification on every run of a high-risk device
+            await self.notify(
+                "high_risk_run",
+                entry.explanation,
+                level="warning" if result == RunResult.CANCELLED else "info",
+                run_id=ctx.run_id,
+                device_id=ctx.device_id,
+                situation_id=ctx.situation_id,
             )
 
     # --- after a failure, the resident chooses (C-09) -------------------------------------------
@@ -633,22 +727,31 @@ class Orchestrator:
                         break
             return run, sit
 
-    async def retry(self, run: Run, sit: dict[str, Any] | None) -> None:
+    def start_retry(self, run: Run, sit: dict[str, Any] | None) -> RunCtx | None:
+        """Opens the new run and starts the robot on it; None without a Verified mapping (C-08). Raises Busy
+        before anything is written."""
+        if self.busy:
+            raise Busy(f"the robot is busy with {self.task_name}")
         item = self.plan_item(run.device_id, action_of(run, sit))
         if item is None:
-            await self.notify("retry_impossible", "The mapping is no longer Verified, so I cannot retry.", "warning")
-            return
+            return None
         item["decision"] = Decision.ACT
-        ctx = self.open_run(Trigger(run.trigger), item, sit["situation_id"] if sit else None)
+        ctx = self.open_run(Trigger(run.trigger), item, sit["situation_id"] if sit else None, retry_of=run.run_id)
+        self.start("retry", lambda: self.retry(ctx, run, sit))
+        return ctx
+
+    async def retry(self, ctx: RunCtx, run: Run, sit: dict[str, Any] | None) -> None:
         if sit is not None:
             for i in sit["plan"]:
                 if i["run_id"] == run.run_id:
                     i.update(run_id=ctx.run_id, result=None, reason=None, resolution="retry")
             sit["status"] = "running"
             await self.save_situation(sit)
+        await self.progress(ctx, Step.DECIDE, "you asked to try again", Stage.S4)
         v = self.add_visit(ctx, ctx.press_spot or HOME_SPOT, "requested")
         self.robot.plan = [v["spot_id"]]
         await self.visits_event()
+        await self.progress(ctx, Step.QUEUED, "waits for the robot", Stage.S6, Channel.ARM)
         await self.press_visit(v, ctx)
         await self.go_home()
         if sit is not None:
@@ -663,6 +766,47 @@ class Orchestrator:
             sit["status"] = self.situation_end(sit)
             await self.save_situation(sit)
         await self.notify("left_as_is", f"Left as it is: {run.entry['intent']}.", run_id=run.run_id)
+
+    # --- a move order from the resident (FR-09, FR-10) --------------------------------------------
+
+    def start_route(self, stops: list[str]) -> dict[str, Any]:
+        """`stops` are spot ids, already resolved. Raises Busy."""
+        if self.busy:
+            raise Busy(f"the robot is busy with {self.task_name}")
+        order = {"route_id": new_id("rt"), "stops": list(stops), "reached": 0, "state": "moving", "reason": None}
+        self.start("route", lambda: self.drive(order))
+        self.route = order
+        return order
+
+    async def route_event(self) -> None:
+        if self.route is not None:
+            await self.emit("robot.route", dict(self.route))
+
+    async def drive(self, order: dict[str, Any]) -> None:
+        await self.route_event()
+        self.robot.plan = list(order["stops"])
+        for spot in order["stops"]:
+            await self.set_task(Step.GATE, f"safety gate: nobody on the way to {spot}")
+            ok, why = await self.answers.route_gate(spot)
+            if not ok:  # C-04: no movement
+                order.update(state="cancelled", reason=f"safety gate failed: {why}")
+                self.robot.task, self.robot.plan = None, []
+                self.robot.state, self.robot.ral_state = "idle", "idle"
+                await self.route_event()
+                await self.robot_event()
+                await self.notify("route_cancelled", f"I did not move: {why}.", "warning", route_id=order["route_id"])
+                return
+            await self.set_task(Step.MOVE, f"go to {spot}")
+            await self.move_to(spot)
+            if self.robot.plan and self.robot.plan[0] == spot:
+                self.robot.plan.pop(0)
+            order["reached"] += 1
+            await self.route_event()
+        order["state"] = "done"
+        self.robot.task, self.robot.plan = None, []
+        self.robot.state, self.robot.ral_state = "idle", "idle"
+        await self.route_event()
+        await self.robot_event()
 
     # --- emergency stop (FR-10) -----------------------------------------------------------------
 
@@ -692,6 +836,9 @@ class Orchestrator:
             if sit["status"] in ACTIVE:
                 sit["status"] = "cancelled"
                 await self.save_situation(sit)
+        if self.route is not None and self.route["state"] == "moving":
+            self.route.update(state="cancelled", reason=EMERGENCY)
+            await self.route_event()
         await self.visits_event()
         await self.robot_event()
         await self.notify("stop", "Emergency stop: the hand stopped and the current run was cancelled.", "warning")

@@ -22,7 +22,9 @@ CHECKED = {
 }
 
 
-def _why(trigger: Trigger, routine_time: str | None) -> str:
+def _why(trigger: Trigger, routine_time: str | None, retried: bool = False) -> str:
+    if retried:
+        return "you asked me to try again"
     if routine_time:
         return f"of your {routine_time} routine"
     return {
@@ -50,6 +52,7 @@ def explain(
     channel: Channel | None,
     reason: str | None,
     routine_time: str | None = None,
+    retried: bool = False,
 ) -> str:
     at = started_at.astimezone(ZoneInfo(time_zone)).strftime("%H:%M")
     name = in_sentence(device_name)
@@ -60,4 +63,4 @@ def explain(
     checked = CHECKED[result]
     if result != RunResult.SUCCESS and reason:
         checked += f" ({reason})"
-    return f"I {verb} the {name} at {at}{how} because {_why(trigger, routine_time)}. Checked: {checked}."
+    return f"I {verb} the {name} at {at}{how} because {_why(trigger, routine_time, retried)}. Checked: {checked}."

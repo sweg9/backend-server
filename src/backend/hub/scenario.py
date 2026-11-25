@@ -88,6 +88,9 @@ class ScriptedAnswers:
     async def gate(self, device_id: str) -> tuple[bool, str | None]:
         return True, None
 
+    async def route_gate(self, spot_id: str) -> tuple[bool, str | None]:
+        return True, None
+
 
 class ScriptedAdapter:
     """A wireless channel that answers as the scenario says: not reached for the listed devices."""

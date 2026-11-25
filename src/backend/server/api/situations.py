@@ -41,3 +41,9 @@ async def list_visits(request: Request):
 async def get_robot(request: Request):
     """FR-09, FR-10."""
     return await relay(request)
+
+
+@router.post("/robot/route", tags=["Robot"])
+async def route_robot(request: Request):
+    """FR-09, FR-10. A move order; the hub passes the safety gate before every leg (C-04)."""
+    return await relay(request)

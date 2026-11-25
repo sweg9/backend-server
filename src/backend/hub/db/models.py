@@ -249,6 +249,7 @@ class OpenRun(Base):
     phase: Mapped[str] = mapped_column(String)
     started_at: Mapped[datetime] = mapped_column(UtcTime)
     dedup_key: Mapped[str] = mapped_column(String, index=True)
+    situation_id: Mapped[str | None] = mapped_column(String)
 
 
 class Run(Base):
@@ -273,7 +274,20 @@ class Run(Base):
     channel: Mapped[str | None] = mapped_column(String)
     result: Mapped[str] = mapped_column(String)
     last_crop_id: Mapped[str | None] = mapped_column(String)
+    situation_id: Mapped[str | None] = mapped_column(String)
     entry: Mapped[dict] = mapped_column(JSON)  # the whole run entry of execution-log.md
+
+
+class RunChoice(Base):
+    """What the resident chose after a failed, unsure or cancelled run (C-09, FR-11). Kept apart from
+    `runs`, which is append-only (L-02). One choice per run; `retry_run_id` is the run the retry started."""
+
+    __tablename__ = "run_choices"
+    __table_args__ = (one_of("choice", ["retry", "leave"]),)
+    run_id: Mapped[str] = mapped_column(ForeignKey("runs.run_id"), primary_key=True)
+    choice: Mapped[str] = mapped_column(String)
+    retry_run_id: Mapped[str | None] = mapped_column(String, unique=True)
+    chosen_at: Mapped[datetime] = mapped_column(UtcTime)
 
 
 APPEND_ONLY_TRIGGERS = [
