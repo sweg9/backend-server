@@ -31,8 +31,8 @@ EXAMPLES = {
     },
     "check": {
         "purpose": "verify",
-        "before": [sealed("ph-h-0130")],
-        "after": [sealed("ph-h-0131")],
+        "before": [sealed("ph_h0130")],
+        "after": [sealed("ph_h0131")],
         "device_box": DEVICE_BOX,
         "device_type": "light",
         "action": "on",
@@ -46,7 +46,7 @@ EXAMPLES = {
         "reason": "the lamp region got brighter",
     },
     "refind": {
-        "photo": sealed("ph-h-0140"),
+        "photo": sealed("ph_h0140"),
         "control": {"control_id": "ctl-0005", "kind": "switch", "box": BOX, "fingerprint": None},
         "actuators": [{"id": "A1", "faces": [0.0, 0.0, 0.5, 1.0]}],
     },
@@ -57,7 +57,7 @@ EXAMPLES = {
         "confidence": 0.9,
         "reason": "switch found near its saved place",
     },
-    "people": {"photo": sealed("ph-h-0141"), "work_area": [0.0, 0.0, 0.5, 1.0]},
+    "people": {"photo": sealed("ph_h0141"), "work_area": [0.0, 0.0, 0.5, 1.0]},
     "people.result": {"clear": True, "confidence": 0.97, "reason": "no person in the work area"},
     "decide": {
         "trigger": "time",
