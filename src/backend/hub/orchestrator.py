@@ -210,8 +210,9 @@ class Orchestrator:
                 await work()
             except asyncio.CancelledError:
                 raise
-            except Exception:
+            except Exception as e:
                 log.exception("task %s failed", name)
+                await self.task_failed(name, e)
 
         self.task_name = name
         self.task = asyncio.create_task(run(), name=name)
@@ -222,6 +223,9 @@ class Orchestrator:
     # --- events --------------------------------------------------------------------------------
 
     async def notify(self, topic: str, message: str, level: str = "info", **extra: Any) -> None:
+        # The hub log keeps what the resident was told, so a gate cancellation or a failure is never only on
+        # a screen nobody watched.
+        log.log(logging.WARNING if level == "warning" else logging.INFO, "notify %s: %s", topic, message)
         await self.emit("notification", {"level": level, "topic": topic, "message": message, "at": iso(now()), **extra})
 
     async def robot_event(self) -> None:
@@ -730,6 +734,15 @@ class Orchestrator:
             db.commit()
             view = run_view(row, retry_of=ctx.retry_of)
         self.open.pop(ctx.run_id, None)
+        log.log(
+            logging.INFO if result == RunResult.SUCCESS else logging.WARNING,
+            "run %s (%s, %s): %s%s",
+            ctx.run_id,
+            ctx.device_name,
+            channel or "no channel",
+            result,
+            "" if result == RunResult.SUCCESS else f": {reason}",
+        )
         sit = self.situations.get(ctx.situation_id or "")
         if sit is not None:
             for i in sit["plan"]:
@@ -862,6 +875,33 @@ class Orchestrator:
 
     async def stop(self) -> str:
         """The hand first; then the task, the questions, the open runs, the visits and the situations."""
+        ral = await self.stop_hand()
+        if self.busy:
+            self.task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self.task
+        await self.wind_down(EMERGENCY)
+        await self.notify("stop", "Emergency stop: the hand stopped and the current run was cancelled.", "warning")
+        return ral
+
+    async def task_failed(self, name: str, error: Exception) -> None:
+        """A task died on an error (C-04, FR-12): as after a stop, the hand stops and what was going on is
+        cancelled, and the resident is told; the next task resets the hand, as after a stop."""
+        why = f"the hub hit an error ({type(error).__name__})"
+        try:
+            await self.stop_hand()
+            await self.wind_down(why)
+        except Exception:
+            log.exception("winding down after task %s failed", name)
+        with contextlib.suppress(Exception):  # the event link itself may be what failed; the log has it
+            await self.notify(
+                "task_failed",
+                f"I stopped: {why} during {name}. The hand stopped and the current run was cancelled.",
+                "warning",
+                task=name,
+            )
+
+    async def stop_hand(self) -> str:
         try:
             await self.ral.stop()
             ral = "stopped"
@@ -869,16 +909,20 @@ class Orchestrator:
             log.exception("the RAL did not stop")
             ral = "error"
         self.robot.state, self.robot.ral_state, self.robot.task, self.robot.plan = "stopped", ral, None, []
-        if self.busy:
-            self.task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self.task
+        return ral
+
+    async def wind_down(self, reason: str) -> None:
+        """Cancels the questions, the open runs, the visits, the situations and the move order."""
         for fut in self.waiting.values():
             if not fut.done():
                 fut.cancel()
         self.waiting.clear()
         for ctx in list(self.open.values()):
-            await self.close(ctx, RunResult.CANCELLED, EMERGENCY)
+            try:
+                await self.close(ctx, RunResult.CANCELLED, reason)
+            except Exception:  # one run that cannot be written must not leave the others open
+                log.exception("could not close run %s", ctx.run_id)
+                self.open.pop(ctx.run_id, None)
         for v in self.visits:
             if v["status"] in ("waiting", "moving", "pressing", "checking"):
                 v["status"] = "cancelled"
@@ -887,12 +931,10 @@ class Orchestrator:
                 sit["status"] = "cancelled"
                 await self.save_situation(sit)
         if self.route is not None and self.route["state"] == "moving":
-            self.route.update(state="cancelled", reason=EMERGENCY)
+            self.route.update(state="cancelled", reason=reason)
             await self.route_event()
         await self.visits_event()
         await self.robot_event()
-        await self.notify("stop", "Emergency stop: the hand stopped and the current run was cancelled.", "warning")
-        return ral
 
 
 def action_of(run: Run, sit: dict[str, Any] | None) -> DeviceAction:

@@ -208,6 +208,40 @@ def test_the_stop_cancels_the_open_runs_and_the_situation():
     asyncio.run(go())
 
 
+@pytest.mark.fr("FR-12")
+def test_a_task_that_dies_stops_the_hand_cancels_its_runs_and_tells_the_resident(caplog):
+    """C-04: an error inside a task is not only a line in the log; the hand stops as after a stop."""
+
+    async def go():
+        h = Hub()
+
+        async def broken_press(actuator, ms):
+            raise RuntimeError("serial port gone")
+
+        working_press, h.ral.press = h.ral.press, broken_press
+        await h.play("leave_home")
+        assert ("stop",) in h.ral.calls
+        why = "the hub hit an error (RuntimeError)"
+        assert any(r.result == "cancelled" and r.entry["reason"] == why for r in h.runs())
+        with h.db() as s:
+            assert s.scalar(select(func.count()).select_from(OpenRun)) == 0
+        sit = (await h.call("GET", "/situations")).body[0]
+        assert sit["status"] == "cancelled"
+        told = [d for k, d in h.events if k == "notification" and d["topic"] == "task_failed"]
+        assert len(told) == 1 and told[0]["level"] == "warning" and told[0]["task"] == "leave_home"
+        assert (await h.call("GET", "/robot")).body["state"] == "stopped"
+        # the next task starts as after a stop
+        h.ral.press = working_press
+        await h.play("one_press")
+        assert (await h.call("GET", "/robot")).body["state"] == "idle"
+
+    with caplog.at_level("INFO", logger="backend.hub.orchestrator"):
+        asyncio.run(go())
+    text = caplog.text
+    assert "task leave_home failed" in text and "notify task_failed" in text
+    assert "cancelled: the hub hit an error" in text
+
+
 @pytest.mark.fr("FR-02")
 def test_new_control_fixes_the_wrong_guess_and_maps_the_strip_with_caution():
     async def go():
