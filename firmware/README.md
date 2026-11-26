@@ -36,8 +36,9 @@ The bench sketch reads no serial commands yet. The format below is **proposed** 
 | `PRESS <actuator> <push_ms>` | `press(actuator, push_ms)` | Out for `push_ms`, then holds | `OK PRESS <actuator>` |
 | `RELEASE <actuator>` | `release(actuator)` | Back to the start | `OK RELEASE <actuator>` |
 | `STOP` | `stop()` | Every actuator off at once (FR-10) | `OK STOP` |
+| `RESET` | none (a person, after an emergency stop) | Accepts `PRESS` again | `OK RESET` |
 | `PING` | none | Nothing | `OK PING` |
 
 - An unknown or malformed line answers `ERR <reason>` and moves nothing.
-- After `STOP` the board ignores `PRESS` until it is reset or sent `RESET` (the real hand needs a person, C-04).
+- After `STOP` the board ignores `PRESS` until a person sends `RESET` or resets the board (C-04).
 - `<actuator>` is an id from `actuators` in `settings/hub.yaml` (`A1`, `A2`).
