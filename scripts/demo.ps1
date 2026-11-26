@@ -10,7 +10,7 @@
 # If Windows refuses to run scripts: powershell -ExecutionPolicy Bypass -File .\scripts\demo.ps1 up
 # The first `up` asks for a new app password and keeps only its hash in data\demo.env (git-ignored, C-10).
 # `play` asks for that password (or reads JUDGE_PASSWORD). The hand comes from settings\hub.yaml:
-# `hand: script` records the presses, `hand: linear_actuators` drives the Arduino (serial_port: COM3 or the
+# `hand: script` records the presses, `hand: linear_actuators` drives the Arduino (serial_port: COM6 or the
 # like, see firmware\README.md).
 param(
     [Parameter(Position = 0)][string]$Command,

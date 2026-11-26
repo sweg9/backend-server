@@ -107,7 +107,7 @@ uv sync --extra server --extra hub
 .\scripts\demo.ps1 play 1      # in a second window; then play 3
 ```
 
-It does what `demo.sh` does and shares `data\demo.env` with it. On Windows, `camera_api: auto` opens the camera through DirectShow, which also takes the exposure lock (FR-08). OpenCV's default there (Media Foundation) opens slowly and takes no exposure values. For the Arduino, set `serial_port: COM3` (the port the Arduino IDE shows) in `settings/hub.yaml`. `demo.ps1` has not run on Windows yet; on the first try, look at `data\demo\*.err.log` if something stops.
+It does what `demo.sh` does and shares `data\demo.env` with it. On Windows, `camera_api: auto` opens the camera through DirectShow, which also takes the exposure lock (FR-08). OpenCV's default there (Media Foundation) opens slowly and takes no exposure values. For the Arduino, set `serial_port` (the port the Arduino IDE shows, `COM6` on the demo laptop) in `settings/hub.yaml`. `demo.ps1` has not run on Windows yet; on the first try, look at `data\demo\*.err.log` if something stops.
 
 With `--demo-scenarios`, `POST /scenarios/new_control/start` (demo scenario 1) or `one_press` (demo scenario 3 as shown: TV and heater off over Wi-Fi, one light pressed once, about 15 s) plays fixed answers through the real orchestrator; `leave_home` is scenario 3 with every failure path, for the Dashboard and tests; watch it on `/ws/app`. Without the flag those routes answer 404.
 

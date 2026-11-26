@@ -69,4 +69,4 @@ uv run backend hand stop
 uv run backend hand reset                  # after a stop: pull everything back, accept PRESS again
 ```
 
-On the hub: `hand: linear_actuators` and `serial_port` (on Windows `COM3` or the like, as the Arduino IDE or Device Manager shows; on the Mac `/dev/cu.usbmodem…` for an Uno, `ls /dev/cu.*`) in `settings/hub.yaml`. `go_to_spot` only logs: the team member holds or pushes the actuators, and the orchestrator shows the move for 2 s. Waiting for the presenter's confirmation in the app (wiki Modules) is not built.
+On the hub: `hand: linear_actuators` and `serial_port` (on Windows `COM6` on the demo laptop, or the port as the Arduino IDE or Device Manager shows; on the Mac `/dev/cu.usbmodem…` for an Uno, `ls /dev/cu.*`) in `settings/hub.yaml`. `go_to_spot` only logs: the team member holds or pushes the actuators, and the orchestrator shows the move for 2 s. Waiting for the presenter's confirmation in the app (wiki Modules) is not built.
