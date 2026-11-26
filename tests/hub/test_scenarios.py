@@ -271,7 +271,7 @@ def test_scenarios_are_off_unless_the_hub_runs_with_them():
         assert (await h.call("POST", "/scenarios/leave_home/start")).status == 404
         h2 = Hub()
         await h2.call("POST", "/login", {"password": "pw"})
-        assert len((await h2.call("GET", "/scenarios")).body) == 3
+        assert len((await h2.call("GET", "/scenarios")).body) == 4
         assert (await h2.call("POST", "/scenarios/nope/start")).status == 404
         assert (await h2.call("POST", "/scenarios/leave_home/start", query={"speed": "99"})).status == 422
 
@@ -619,5 +619,33 @@ def test_one_press_after_scenario_1_presses_the_stand_lamp_without_asking():
         assert "Living room stand lamp" in p and "Living room ceiling light" not in p
         assert p["Living room stand lamp"]["result"] == "success"
         assert not [n for k, n in h.events if k == "notification" and n.get("topic") == "question"]
+
+    asyncio.run(go())
+
+
+@pytest.mark.fr("FR-02")
+@pytest.mark.fr("FR-07")
+@pytest.mark.fr("FR-11")
+def test_full_demo_maps_the_switch_then_turns_the_lamp_off_and_on_by_press_after_ir_fails():
+    """The live demo in one flow: map, IR first and no change, the gate, one press, the check; twice."""
+
+    async def go():
+        h = Hub()
+        await h.play("full_demo")
+        sits = (await h.call("GET", "/situations")).body
+        by_kind = {s["kind"]: s for s in sits}
+        assert {"leave_home", "come_home"} <= set(by_kind)
+        for kind, action in (("leave_home", "off"), ("come_home", "on")):
+            lamp = plan_by_name(by_kind[kind])["Living room stand lamp"]
+            assert lamp["action"] == action
+            assert lamp["wireless"]["channel"] == "IR" and lamp["wireless"]["result"] == "failure"  # C-09
+            assert (lamp["method"], lamp["result"]) == ("press", "success")
+        presses = [c for c in h.ral.calls if c[0] == "press"]
+        assert len(presses) == 2  # one per turn: FR-11
+        steps = [d["step"] for k, d in h.events if k == "run.progress"]
+        assert steps.index("wireless") < steps.index("gate") < steps.index("press")  # C-04: gate right before
+        gates = [d["gate"] for k, d in h.events if k == "run.progress" and d["step"] == "gate" and "gate" in d]
+        assert gates == ["pass", "pass"]
+        assert (await h.call("GET", "/robot")).body["state"] == "idle"
 
     asyncio.run(go())

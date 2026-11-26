@@ -19,6 +19,12 @@ that is the real hub: the orchestrator, the run entries, the records and the eve
   and presses; the bedroom light shows no change after the first press, so the robot passes the gate
   again and presses once more, which works; the kitchen light stays unsure after one more look, so the
   resident chooses retry or leave.
+- `full_demo` (the live demo in one flow, for the video): scenario 1 maps the new switch to the stand
+  lamp; then "you left home": the lamp's IR remote is tried first and the camera sees no change, so the
+  robot passes the gate and presses the switch (the real hand with `hand: linear_actuators`) and the
+  check confirms it is off; then "you came home": the same again, and the lamp is back on. The IR
+  channel of the lamp is added for this demo only. The scan, the IR answer and the checks are fixed
+  answers like the other scenarios.
 """
 
 from collections.abc import Awaitable, Callable
@@ -41,7 +47,7 @@ from backend.common.vocab import (
     Trigger,
 )
 from backend.hub.channels.base import SendResult
-from backend.hub.db.models import Control, Device, Mapping, Scan
+from backend.hub.db.models import ChannelRow, Control, Device, Mapping, Scan
 from backend.hub.orchestrator import Orchestrator
 from backend.hub.prefs import proactive
 from backend.hub.registry import add_control, add_crop, add_mapping, now, verify_mapping
@@ -395,7 +401,64 @@ async def new_control(orch: Orchestrator) -> None:
     await orch.go_home()
 
 
+# --- the live demo in one flow -----------------------------------------------------------------
+
+FULL_DEMO_LAMP = "Living room stand lamp"  # the light scenario 1 maps
+IR_NO_CHANGE = "the camera saw no change after the IR command"
+FULL_DEMO_PAUSE_S = 4.0  # between "left home" and "came home", so the light stays off on camera
+
+
+async def full_demo(orch: Orchestrator) -> None:
+    await new_control(orch)
+    with orch.db() as db:
+        lamp = verified_device(db, FULL_DEMO_LAMP)
+        lamp_id = lamp.device_id
+        if db.get(ChannelRow, (lamp_id, Channel.IR)) is None:  # the lamp's IR remote, for this demo only
+            db.add(
+                ChannelRow(
+                    device_id=lamp_id,
+                    channel=Channel.IR,
+                    address=None,
+                    success_score=0.6,
+                    latency_ms=1200,
+                    tries=0,
+                    updated_at=now(),
+                )
+            )
+        m = db.scalar(select(Mapping).where(Mapping.device_id == lamp_id, Mapping.status == MappingStatus.VERIFIED))
+        c = db.get(Control, m.control_id)
+        if c.state != ControlState.ON:  # the lamp is on when the resident leaves
+            c.state = ControlState.ON
+            changed = control_view(c)
+            db.flush()
+            await orch.emit("control", changed)
+        paused = proactive(db)["paused"]
+        db.commit()
+    orch.adapters = {c: ScriptedAdapter(c) for c in (Channel.IR, Channel.WIFI, Channel.BT)}
+
+    async def turn(kind: str, summary: str, action: DeviceAction) -> None:
+        # IR goes out but the camera sees no change, so the robot presses the switch (C-09: wireless first)
+        orch.answers = ScriptedAnswers(
+            act=True, outcomes={(lamp_id, Channel.IR): Outcome(CheckAnswer.NO, IR_NO_CHANGE)}
+        )
+        await orch.handle_situation(kind, Trigger.SENSOR, summary, [(lamp_id, action)], paused)
+
+    await turn(
+        "leave_home",
+        "You left home: the front door closed and nobody has moved inside for 2 minutes.",
+        DeviceAction.OFF,
+    )
+    await orch.wait(FULL_DEMO_PAUSE_S)
+    await turn("come_home", "You came home: the front door opened.", DeviceAction.ON)
+
+
 SCENARIOS: dict[str, tuple[str, Callable[[Orchestrator], Awaitable[None]]]] = {
+    "full_demo": (
+        "The live demo in one flow: scenario 1 maps the new switch to the stand lamp; 'you left home' tries "
+        "the lamp's IR, the camera sees no change, so the robot presses the switch and the light goes off; "
+        "'you came home' does the same and the light goes on.",
+        full_demo,
+    ),
     "one_press": (
         "Demo scenario 3 as shown. 'You left home' comes in, TV and heater go off over Wi-Fi, one light has no "
         "channel, so the robot passes the gate and presses it once, and the check confirms it.",
