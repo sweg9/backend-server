@@ -13,7 +13,7 @@ aws kms put-key-policy --key-id "$KEY" --policy-name default --policy "$(cat <<J
   {"Sid": "Account manages the key", "Effect": "Allow", "Principal": {"AWS": "arn:aws:iam::$ACCOUNT:root"},
    "Action": ["kms:Describe*", "kms:Get*", "kms:List*", "kms:Put*", "kms:Create*", "kms:Update*", "kms:Enable*",
               "kms:Disable*", "kms:TagResource", "kms:UntagResource", "kms:ScheduleKeyDeletion",
-              "kms:CancelKeyDeletion", "kms:GenerateDataKey"],
+              "kms:CancelKeyDeletion", "kms:DeleteAlias", "kms:GenerateDataKey"],
    "Resource": "*"},
   {"Sid": "Only the enclave opens photos", "Effect": "Allow", "Principal": {"AWS": "$ROLE"},
    "Action": "kms:Decrypt", "Resource": "*",

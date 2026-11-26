@@ -21,7 +21,7 @@ if aws iam get-role --role-name "$ROLE" >/dev/null 2>&1; then
 fi
 KEY=$(aws kms describe-key --key-id alias/sweg9-aws-test-photos --query KeyMetadata.KeyId --output text 2>/dev/null || true)
 if [ -n "$KEY" ] && [ "$KEY" != None ]; then
-  aws kms delete-alias --alias-name alias/sweg9-aws-test-photos
+  aws kms delete-alias --alias-name alias/sweg9-aws-test-photos || true   # the key's deletion takes it anyway
   aws kms schedule-key-deletion --key-id "$KEY" --pending-window-in-days 7 >/dev/null
   echo "KMS key $KEY is deleted in 7 days"
 fi

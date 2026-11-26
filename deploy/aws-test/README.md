@@ -1,5 +1,12 @@
 # A short test of the AWS design
 
+**Ran on 2026-11-26 and worked end to end:** a photo from the laptop camera was sealed with KMS on the hub,
+passed through the server unopened, opened only inside the Nitro Enclave (KMS checked its PCR0), and the
+enclave's YOLO found the person at the laptop, so the safety gate cancelled the move (C-04, C-05, FR-10).
+About 1 hour of m6i.xlarge, then everything deleted. The run found and fixed: uvloop cannot use vsock (the
+server now runs on the standard asyncio loop), a KMS failure killed the hub's task (now the photo stays home),
+an enclave image over 2 GiB, PATH inside the enclave, and memory for linuxkit next to the allocator.
+
 One `m6i.xlarge` in Seoul for a few hours, deleted right after: the server pod on k3s, the enclave program in a
 real Nitro Enclave over vsock, and a photo sealed on the laptop with KMS and opened only inside the enclave
 (C-05). About $0.25 an hour while the instance runs; nothing is left afterwards. The full deployment
