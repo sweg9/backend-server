@@ -63,7 +63,10 @@ ExecStop=/usr/bin/nitro-cli terminate-enclave --all
 WantedBy=multi-user.target
 EOF
 sudo systemctl daemon-reload
-sudo systemctl enable --now sweg9-vsock-proxy sweg9-enclave
+sudo systemctl enable --now sweg9-vsock-proxy
+sudo systemctl enable sweg9-enclave && sudo systemctl restart sweg9-enclave   # a rerun starts the new EIF
+sleep 20
+sudo nitro-cli describe-enclaves | grep -q '"State": "RUNNING"' || { echo "the enclave stopped right after starting" >&2; exit 1; }
 
 # 6. k3s and the server pod (the image is imported, not pulled)
 command -v k3s >/dev/null || curl -sfL https://get.k3s.io | sudo sh -s - --write-kubeconfig-mode 644

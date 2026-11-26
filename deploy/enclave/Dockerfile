@@ -44,4 +44,5 @@ COPY kmstool_enclave_cli /app/kmstool_enclave_cli
 COPY libnsm.so /usr/lib64/libnsm.so
 WORKDIR /app
 
-CMD ["backend", "enclave", "--port", "5000", "--engine-root", "/app/engine"]
+# An absolute path: the enclave's init does not take PATH from the image.
+CMD ["/usr/local/bin/backend", "enclave", "--port", "5000", "--engine-root", "/app/engine"]
