@@ -34,7 +34,12 @@ cp ai-engine/linker/prior.json ctx/engine/linker/
   https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11s.pt
 cp sdk-c/bin/kmstool-enclave-cli/kmstool_enclave_cli sdk-c/bin/kmstool-enclave-cli/libnsm.so ctx/
 $D build -f backend-server/deploy/enclave/Dockerfile --build-arg AI_ENGINE_REV=$AI_ENGINE_REV -t sweg9/ml-engine:test ctx
+# linuxkit needs about 5 GB of RAM for this image, and the allocator holds 8 GiB for the enclave: free it meanwhile.
+sudo nitro-cli terminate-enclave --all || true
+sudo systemctl stop nitro-enclaves-allocator.service
+sudo find /tmp -maxdepth 1 -regex '/tmp/[0-9]+' -delete   # exports left by a failed build
 sudo nitro-cli build-enclave --docker-uri sweg9/ml-engine:test --output-file $W/ml-engine.eif | tee $W/eif.json
+sudo systemctl start nitro-enclaves-allocator.service
 python3 -c "import json;print(json.load(open('$W/eif.json'))['Measurements']['PCR0'])" > $W/pcr0
 
 # 5. The enclave and the vsock proxy it reaches KMS through. Not in debug mode: there the PCRs are zeros and
