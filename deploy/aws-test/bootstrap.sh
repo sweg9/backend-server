@@ -91,6 +91,7 @@ sed -e 's#^\(  detector_weights:\).*#\1 null#' -e 's#^\(  effect_weights:\).*#\1
 kubectl -n sweg9 create configmap enclave-settings --from-file=$S/risk.yaml --from-file=$S/enclave.yaml \
   --from-file=ai-engine.yaml=$W/ai-engine.yaml --dry-run=client -o yaml | kubectl apply -f -
 kubectl kustomize --load-restrictor LoadRestrictionsNone backend-server/deploy/aws-test/k8s | kubectl apply -f -   # it reuses ../../k8s
+kubectl -n sweg9 rollout restart deploy/server   # a rerun made a new HUB_TOKEN: the pod reads it only at start
 kubectl -n sweg9 rollout status deploy/server --timeout=180s
 
 set +x
