@@ -24,7 +24,7 @@ Arduino sketches for the hand. The hub on the home laptop talks to the board ove
 | 9, 10, 11, 12 | a second BTS7960 | A2, the same roles in the same order. Not wired on the bench yet |
 | `LED_BUILTIN` | none | On while the actuator moves |
 
-- Travel is timed, not measured. In `bench.ino`, `moveMm` runs the motor at full duty for `mm / SPEED_MM_S` seconds; `SPEED_MM_S` (8 mm/s) is an estimate. In `actuator.ino` the hub gives the push time in ms (`PUSH_MS` in `src/backend/hub/orchestrator.py`, 2000 ms: the demo switch went down there on the bench, 2026-11-26; then it stays out `HOLD_S`, 2 s, before `RELEASE`). Back runs 1.2 times the push plus 100 ms, so the actuator always reaches its end switch and does not drift.
+- Travel is timed, not measured. In `bench.ino`, `moveMm` runs the motor at full duty for `mm / SPEED_MM_S` seconds; `SPEED_MM_S` (8 mm/s) is an estimate. In `actuator.ino` the hub gives the push time in ms (`PUSH_MS` in `src/backend/hub/orchestrator.py`, 2000 ms, the board's cap: not yet measured on the power strip, which was not at the bench on 2026-11-26, so set the mounting distance until the switch goes down within it; then it stays out `HOLD_S`, 2 s, before `RELEASE`). Back runs 1.2 times the push plus 100 ms, so the actuator always reaches its end switch and does not drift.
 - Only one direction pin is driven at a time; the other is set to 0 first.
 
 ## Serial command format

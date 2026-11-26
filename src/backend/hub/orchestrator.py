@@ -53,7 +53,8 @@ log = logging.getLogger(__name__)
 Emit = Callable[[str, dict[str, Any]], Awaitable[None]]
 
 HOME_SPOT = "dock"
-PUSH_MS = 2000  # how long an actuator pushes: the demo switch went down at 2000 ms on the bench (2026-11-26)
+PUSH_MS = 2000  # how long an actuator pushes. The board's cap (MAX_PUSH_MS); not measured on the power strip
+# (none at the bench, 2026-11-26): mount the actuator so the switch goes down within it
 HOLD_S = 2.0  # how long it stays out on the switch before it pulls back; the board pulls back by itself at 5 s
 ACTIVE = ("received", "planning", "waiting_for_answer", "running")
 EMERGENCY = "emergency stop"
