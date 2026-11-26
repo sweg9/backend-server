@@ -211,3 +211,18 @@ def test_kmstool_failures_are_seal_errors(monkeypatch, raised, message):
     keys = KmstoolKeys("ap-northeast-2", 8000, lambda: ("AKIA", "secret", "token"), ENCLAVE.kmstool_timeout_s)
     with pytest.raises(SealError, match=message):
         keys.open_key(b"wrapped")
+
+
+def test_a_kms_failure_keeps_the_photo_home():
+    """Expired credentials or no network: SealError, so the step goes on the safe side (C-05) instead of
+    the task dying (seen on the AWS test, 2026-11-26)."""
+    import pytest
+
+    from backend.common.sealing import SealError
+
+    class Expired:
+        def generate_data_key(self, **_):
+            raise RuntimeError("Credentials were refreshed, but the refreshed credentials are still expired.")
+
+    with pytest.raises(SealError, match="KMS gave no data key"):
+        KmsDataKeys("alias/k", Expired()).new_key()

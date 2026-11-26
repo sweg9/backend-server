@@ -12,9 +12,11 @@ cp settings/*.yaml "$DIR/"
 sed -i '' -e "s#^server_url:.*#server_url: ws://$IP/api/ws/hub#" -e "s#^kms_key_id:.*#kms_key_id: $KEY#" \
   -e "s#^database_url:.*#database_url: sqlite:///$DIR/app.db#" "$DIR/hub.yaml"
 export BACKEND_SETTINGS_DIR=$DIR
-eval "$(aws configure export-credentials --format env)"
+# boto3 uses the `aws login` session itself and refreshes it (needs awscrt); exported credentials expire in minutes.
+UVRUN=(uv run --with awscrt)
 read -rsp "HUB_TOKEN from setup: " HUB_TOKEN; echo; export HUB_TOKEN
-export APP_PASSWORD_HASH=$(uv run backend hash-password)
-uv run backend seed-demo
+export APP_PASSWORD_HASH=$("${UVRUN[@]}" backend hash-password)
+"${UVRUN[@]}" backend seed-demo
 echo "API: http://$IP/api   (sign in with the password you just chose)"
-exec uv run backend hub --stdout
+export AWS_REGION
+exec "${UVRUN[@]}" backend hub --stdout

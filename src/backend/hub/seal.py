@@ -41,7 +41,10 @@ class KmsDataKeys:
         self.client = client
 
     def new_key(self) -> tuple[bytes, bytes]:
-        r = self.client.generate_data_key(KeyId=self.key_id, KeySpec="AES_256")
+        try:
+            r = self.client.generate_data_key(KeyId=self.key_id, KeySpec="AES_256")
+        except Exception as e:  # expired credentials, no network, a refused key: the photo stays home (C-05)
+            raise SealError(f"KMS gave no data key ({type(e).__name__})") from e
         return r["Plaintext"], r["CiphertextBlob"]
 
 
