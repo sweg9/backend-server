@@ -62,11 +62,14 @@ Safety in the board itself, so the hand stops even if the hub or the USB link di
 
 ```sh
 uv run backend hand ping
-uv run backend hand press A1 --ms 400      # press, then release
+uv run backend hand press A1               # as the hub: push 2000 ms (PUSH_MS), 2 s on the switch (HOLD_S), release
+uv run backend hand press A1 --ms 1500 --hold-s 1   # other times, to tune them on the panel
 uv run backend hand press A1 --hold        # press and stay out (it goes back by itself after 5 s)
 uv run backend hand release A1
 uv run backend hand stop
 uv run backend hand reset                  # after a stop: pull everything back, accept PRESS again
 ```
+
+Each `backend hand` opens the port, and opening the port restarts an Uno or a Nano (it prints `READY` after about 1.5 s). So a `stop` from an earlier command is gone by the next one. And a `release` within 5 s of `press --hold` restarts the board while the actuator is out: the board answers `OK RELEASE` without moving, so wait the 5 s (it pulls back by itself) or send `reset`. The hub keeps the port open, so its `STOP` holds until `RESET`.
 
 On the hub: `hand: linear_actuators` and `serial_port` (on Windows `COM6` on the demo laptop, or the port as the Arduino IDE or Device Manager shows; on the Mac `/dev/cu.usbmodem…` for an Uno, `ls /dev/cu.*`) in `settings/hub.yaml`. `go_to_spot` only logs: the team member holds or pushes the actuators, and the orchestrator shows the move for 2 s. Waiting for the presenter's confirmation in the app (wiki Modules) is not built.
