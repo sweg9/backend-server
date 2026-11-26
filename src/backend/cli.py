@@ -52,6 +52,7 @@ def _server(args) -> int:
         host=args.host,
         port=args.port,
         workers=1,
+        loop="asyncio",  # uvloop can neither connect nor stream a vsock socket (the Nitro Enclave link)
         log_config=None,
         proxy_headers=True,
     )
