@@ -234,7 +234,7 @@ def test_scenarios_are_off_unless_the_hub_runs_with_them():
         assert (await h.call("POST", "/scenarios/leave_home/start")).status == 404
         h2 = Hub()
         await h2.call("POST", "/login", {"password": "pw"})
-        assert len((await h2.call("GET", "/scenarios")).body) == 2
+        assert len((await h2.call("GET", "/scenarios")).body) == 3
         assert (await h2.call("POST", "/scenarios/nope/start")).status == 404
         assert (await h2.call("POST", "/scenarios/leave_home/start", query={"speed": "99"})).status == 422
 
@@ -540,5 +540,47 @@ def test_unsure_then_no_on_the_second_look_is_not_pressed_again():
         assert run.result == "failure" and not run.entry["reason"].startswith("pressed twice")
         texts = [d["text"] for k, d in h.events if k == "run.progress" and d["step"] == "check"]
         assert "it did not work: press once more" not in texts
+
+    asyncio.run(go())
+
+
+# --- demo scenario 3 as shown: one press --------------------------------------------------------
+
+
+@pytest.mark.fr("FR-07")
+@pytest.mark.fr("FR-10")
+def test_one_press_turns_off_tv_and_heater_by_wifi_and_presses_one_light_once():
+    async def go():
+        h = Hub()
+        await h.play("one_press")
+        sit = (await h.call("GET", "/situations")).body[0]
+        p = plan_by_name(sit)
+        assert set(p) == {"TV", "Heater", "Living room ceiling light"}  # scenario 1 did not run
+        assert (p["TV"]["method"], p["TV"]["result"]) == ("wireless", "success")
+        assert (p["Heater"]["method"], p["Heater"]["result"]) == ("wireless", "success")
+        light = p["Living room ceiling light"]
+        assert (light["method"], light["result"]) == ("press", "success")
+        assert light["decision"] == "act" and sit["status"] != "waiting_for_answer"
+        assert len([c for c in h.ral.calls if c[0] == "press"]) == 1
+        gates = [d for k, d in h.events if k == "run.progress" and d["step"] == "gate" and "gate" in d]
+        assert [g["gate"] for g in gates] == ["pass"]  # C-04
+        assert (await h.call("GET", "/robot")).body["state"] == "idle"
+
+    asyncio.run(go())
+
+
+@pytest.mark.fr("FR-02")
+def test_one_press_after_scenario_1_presses_the_stand_lamp_without_asking():
+    """Scenario 1 makes the stand lamp Verified with an ask-first routine; the demo still shows no question."""
+
+    async def go():
+        h = Hub()
+        await h.play("new_control")
+        await h.play("one_press")
+        sit = (await h.call("GET", "/situations")).body[0]
+        p = plan_by_name(sit)
+        assert "Living room stand lamp" in p and "Living room ceiling light" not in p
+        assert p["Living room stand lamp"]["result"] == "success"
+        assert not [n for k, n in h.events if k == "notification" and n.get("topic") == "question"]
 
     asyncio.run(go())

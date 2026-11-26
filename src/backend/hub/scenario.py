@@ -8,11 +8,16 @@ that is the real hub: the orchestrator, the run entries, the records and the eve
 - `new_control` (demo scenario 1, FR-01 to FR-04): a scan finds a new switch and guesses "ceiling light
   83%"; the resident flips it; the check shows the stand lamp changed, so the mapping is fixed and
   Verified; a habit routine is added.
-- `leave_home` (demo scenario 3, FR-05 to FR-12): "you left home" comes in; the plan turns off what is
-  on; TV and heater go off over Wi-Fi, the purifier gets no Bluetooth answer and the bedroom light no
-  IR effect, two lights have no channel; the robot visits and presses; the bedroom light shows no change
-  after the first press, so the robot passes the gate again and presses once more, which works; the
-  kitchen light stays unsure after one more look, so the resident chooses retry or leave.
+- `one_press` (demo scenario 3 as shown, FR-05, FR-07 to FR-12): "you left home" comes in; TV and heater
+  go off over Wi-Fi (shown on screen only); one light has no channel, so the robot visits it, passes the
+  gate and presses once, and the check confirms it. The light is the switch of scenario 1 (the stand lamp)
+  when scenario 1 ran, else the living room ceiling light. About 20 s at speed 1, plus the cart's move.
+- `leave_home` (scenario 3 with every failure path, for the Dashboard and tests, FR-05 to FR-12): "you
+  left home" comes in; the plan turns off what is on; TV and heater go off over Wi-Fi, the purifier gets
+  no Bluetooth answer and the bedroom light no IR effect, two lights have no channel; the robot visits
+  and presses; the bedroom light shows no change after the first press, so the robot passes the gate
+  again and presses once more, which works; the kitchen light stays unsure after one more look, so the
+  resident chooses retry or leave.
 """
 
 from collections.abc import Awaitable, Callable
@@ -65,6 +70,7 @@ class ScriptedAnswers:
 
     outcomes: dict[tuple[str, Channel], Outcome] = field(default_factory=dict)
     low_confidence: float = 0.5
+    act: bool = False  # act on every item without asking (one_press: the demo shows no question)
 
     async def look_before(self, device_id: str, channel: Channel) -> None:
         pass
@@ -74,6 +80,8 @@ class ScriptedAnswers:
         # the enclave's policy.
         if paused or item.get("independence") == Independence.SUGGEST_ONLY or item["confidence"] < self.low_confidence:
             return Decision.SUGGEST
+        if self.act:
+            return Decision.ACT
         if item.get("independence") == Independence.ASK_FIRST:
             return Decision.ASK
         return Decision.ACT
@@ -121,6 +129,44 @@ def device_by_name(db, name: str) -> Device:
 
 
 # --- demo scenario 3 ---------------------------------------------------------------------------
+
+
+def verified_device(db, *names: str) -> Device:
+    """The first of `names` with a Verified mapping."""
+    for name in names:
+        d = db.scalar(select(Device).where(Device.name == name))
+        if d is not None and db.scalar(
+            select(Mapping.mapping_id).where(Mapping.device_id == d.device_id, Mapping.status == MappingStatus.VERIFIED)
+        ):
+            return d
+    raise NotReady(f"none of {', '.join(names)} has a Verified mapping")
+
+
+async def one_press(orch: Orchestrator) -> None:
+    with orch.db() as db:
+        light = verified_device(db, "Living room stand lamp", "Living room ceiling light")
+        ids = [device_by_name(db, "TV").device_id, device_by_name(db, "Heater").device_id, light.device_id]
+        # Before it starts, the three are back on, as if the resident came home.
+        for m in db.scalars(
+            select(Mapping).where(Mapping.device_id.in_(ids), Mapping.status == MappingStatus.VERIFIED)
+        ):
+            c = db.get(Control, m.control_id)
+            if c.state != ControlState.ON:
+                c.state = ControlState.ON
+                changed = control_view(c)
+                db.flush()
+                await orch.emit("control", changed)
+        paused = proactive(db)["paused"]
+        db.commit()
+    orch.adapters = {c: ScriptedAdapter(c) for c in (Channel.IR, Channel.WIFI, Channel.BT)}
+    orch.answers = ScriptedAnswers(act=True)
+    await orch.handle_situation(
+        "leave_home",
+        Trigger.SENSOR,
+        "You left home: the front door closed and nobody has moved inside for 2 minutes.",
+        [(i, DeviceAction.OFF) for i in ids],
+        paused,
+    )
 
 
 async def leave_home(orch: Orchestrator) -> None:
@@ -346,14 +392,20 @@ async def new_control(orch: Orchestrator) -> None:
 
 
 SCENARIOS: dict[str, tuple[str, Callable[[Orchestrator], Awaitable[None]]]] = {
+    "one_press": (
+        "Demo scenario 3 as shown. 'You left home' comes in, TV and heater go off over Wi-Fi, one light has no "
+        "channel, so the robot passes the gate and presses it once, and the check confirms it.",
+        one_press,
+    ),
     "new_control": (
         "Demo scenario 1. A scan finds a new switch, guesses the ceiling light, the resident flips it, the check "
         "shows the stand lamp, the mapping is fixed and Verified, a habit routine is added.",
         new_control,
     ),
     "leave_home": (
-        "Demo scenario 3. 'You left home' comes in, the plan turns off what is on, wireless succeeds and fails, "
-        "the robot visits and presses, and the kitchen light stays unsure so the resident chooses retry or leave.",
+        "Demo scenario 3 with every failure path (Dashboard and tests). 'You left home' comes in, the plan "
+        "turns off what is on, wireless succeeds and fails, the robot visits and presses, and the kitchen "
+        "light stays unsure so the resident chooses retry or leave.",
         leave_home,
     ),
 }

@@ -96,9 +96,9 @@ uv run backend server --port 8000
 uv run backend hub --stdout --demo-scenarios --server-url ws://127.0.0.1:8000/ws/hub
 ```
 
-With `--demo-scenarios`, `POST /scenarios/leave_home/start` (demo scenario 3) or `new_control` (scenario 1) plays fixed answers through the real orchestrator; watch it on `/ws/app`. Without the flag those routes answer 404.
+With `--demo-scenarios`, `POST /scenarios/new_control/start` (demo scenario 1) or `one_press` (demo scenario 3 as shown: TV and heater off over Wi-Fi, one light pressed once, about 15 s) plays fixed answers through the real orchestrator; `leave_home` is scenario 3 with every failure path, for the Dashboard and tests; watch it on `/ws/app`. Without the flag those routes answer 404.
 
-**Scenario judge.** With the pair running, `backend judge` plays scenarios 1 and 3 through the API as the Dashboard would, plays the resident's part (approves questions, retries the unsure run once), and prints pass or fail with the numbers for the slides: trigger to first press, press to the check's answer, the check success rate (`src/backend/tools/judge.py`). It also checks the safety rules in every run: a gate pass right before each press (C-04), at most 2 presses (FR-11), no press after unsure (FR-08), wireless first (C-09).
+**Scenario judge.** With the pair running, `backend judge` plays scenario 1 and the short scenario 3 (`--scenario all` adds `leave_home`) through the API as the Dashboard would, plays the resident's part (approves questions, retries the unsure run once), and prints pass or fail with the numbers for the slides: trigger to first press, press to the check's answer, the check success rate (`src/backend/tools/judge.py`). It also checks the safety rules in every run: a gate pass right before each press (C-04), at most 2 presses (FR-11), no press after unsure (FR-08), wireless first (C-09).
 
 ```bash
 JUDGE_PASSWORD=... uv run backend judge --url http://127.0.0.1:8000 --speed 20     # quick check

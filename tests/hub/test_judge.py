@@ -6,12 +6,21 @@ import time
 
 import pytest
 
-from backend.tools.judge import Event, RunSteps, judge_leave_home, judge_new_control, safety_problems
+from backend.tools.judge import (
+    Event,
+    RunSteps,
+    judge_leave_home,
+    judge_new_control,
+    judge_one_press,
+    safety_problems,
+)
 from tests.hub.test_scenarios import Hub
 
 
-async def recorded(name, retry=False):
+async def recorded(name, retry=False, before=None):
     h = Hub()
+    if before:
+        await h.play(before)
     t0 = time.monotonic()
     events: list[Event] = []
     original = h.orch.emit
@@ -58,6 +67,27 @@ def test_new_control_passes():
     rep = judge_new_control(events, devices, 1000)
     assert rep.passed, [c for c in rep.checks if not c.ok]
     assert rep.numbers["scan_s"] is not None and rep.numbers["detections_shown"] > 0
+
+
+@pytest.mark.fr("FR-10")
+def test_one_press_passes_with_one_press():
+    events, sit, _ = asyncio.run(recorded("one_press"))
+    rep = judge_one_press(events, sit, 1000)
+    assert rep.passed, [c for c in rep.checks if not c.ok]
+    assert rep.numbers["check_answer"] == "yes" and rep.numbers["trigger_to_press_s"] is not None
+
+
+def test_one_press_after_scenario_1_passes_on_the_stand_lamp():
+    events, sit, _ = asyncio.run(recorded("one_press", before="new_control"))
+    rep = judge_one_press(events, sit, 1000)
+    assert rep.passed, [c for c in rep.checks if not c.ok]
+    assert "Living room stand lamp" in next(c.detail for c in rep.checks if c.name.startswith("one light"))
+
+
+def test_one_press_fails_on_the_events_of_leave_home():
+    events, sit, _ = asyncio.run(recorded("leave_home"))
+    failed = [c.name for c in judge_one_press(events, sit).checks if not c.ok]
+    assert "exactly one press in the whole scenario" in failed
 
 
 def test_no_situation_fails():

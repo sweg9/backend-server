@@ -83,7 +83,10 @@ def _judge(args) -> int:
     from backend.tools.judge import JudgeError, aggregate, judge, summary, text
 
     password = os.environ.get("JUDGE_PASSWORD") or getpass.getpass("App password: ")
-    names = ["new_control", "leave_home"] if args.scenario == "all" else [args.scenario]
+    names = {
+        "demo": ["new_control", "one_press"],
+        "all": ["new_control", "one_press", "leave_home"],
+    }.get(args.scenario, [args.scenario])
     try:
         reports = asyncio.run(judge(args.url, password, names, args.speed, args.rounds, args.timeout))
     except JudgeError as e:
@@ -155,9 +158,14 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--host", default="127.0.0.1", help="0.0.0.0 inside the pod")
     c.add_argument("--port", type=int, default=8000)
     c.set_defaults(func=_server)
-    j = sub.add_parser("judge", help="play demo scenarios 1 and 3 through the API and judge them")
+    j = sub.add_parser("judge", help="play the demo scenarios through the API and judge them")
     j.add_argument("--url", default="http://127.0.0.1:8000", help="the server's API root")
-    j.add_argument("--scenario", choices=["all", "new_control", "leave_home"], default="all")
+    j.add_argument(
+        "--scenario",
+        choices=["demo", "all", "new_control", "one_press", "leave_home"],
+        default="demo",
+        help="demo: scenario 1 then the short scenario 3, as shown (default); all: also leave_home",
+    )
     j.add_argument("--speed", type=float, default=1.0, help="1 for the numbers on the slides; up to 20 to go fast")
     j.add_argument("--rounds", type=int, default=1, help="play each scenario this many times")
     j.add_argument("--timeout", type=float, default=600, help="seconds for one scenario")

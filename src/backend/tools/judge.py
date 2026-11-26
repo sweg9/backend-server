@@ -1,5 +1,6 @@
-"""Scenario judge: plays demo scenarios 1 and 3 through the public API, as the Dashboard would, and says
-pass or fail with the numbers for the slides (wiki: Demo scenarios).
+"""Scenario judge: plays the demo scenarios (1 `new_control`, 3 `one_press`; also the long `leave_home`)
+through the public API, as the Dashboard would, and says pass or fail with the numbers for the slides
+(wiki: Demo scenarios).
 
 `backend judge --url http://127.0.0.1:8000` signs in (password from JUDGE_PASSWORD or a prompt), opens
 the live socket `/ws/app`, starts each scenario and records every `app.event` with the time it came. The
@@ -221,6 +222,59 @@ def judge_leave_home(events: list[Event], situation: dict[str, Any] | None, spee
     return rep
 
 
+# --- demo scenario 3 as shown: one press ----------------------------------------------------------
+
+ONE_PRESS_LIGHTS = ("Living room stand lamp", "Living room ceiling light")  # the stand lamp after scenario 1
+
+
+def judge_one_press(events: list[Event], situation: dict[str, Any] | None, speed: float = 1.0) -> Report:
+    rep = Report("one_press", speed)
+    if situation is None:
+        rep.check("a situation came in", False, "no situation event")
+        return rep
+    rep.check("a situation came in", True, situation.get("summary", ""))
+    plan = {i["name"]: i for i in situation.get("plan", [])}
+    runs = runs_of(events)
+    results = {e.data.get("run_id"): e.data.get("result") for e in events if e.kind == "run.result"}
+    for name in ("TV", "Heater"):
+        item = plan.get(name, {})
+        r = runs.get(item.get("run_id") or "")
+        rep.check(
+            f"{name}: off over wireless, no press",
+            results.get(item.get("run_id")) == "success" and r is not None and not r.presses,
+            f"got {results.get(item.get('run_id'))}",
+        )
+    light = next((plan[n] for n in ONE_PRESS_LIGHTS if n in plan), None)
+    r = runs.get((light or {}).get("run_id") or "")
+    rep.check(
+        "one light: no channel, one press, the check says it worked",
+        light is not None and r is not None and len(r.presses) == 1 and results.get(r.run_id) == "success",
+        "no light in the plan" if light is None else f"{light['name']}: {results.get(light.get('run_id'))}",
+    )
+    all_presses = [p for x in runs.values() for p in x.presses]
+    rep.check("exactly one press in the whole scenario", len(all_presses) == 1, f"{len(all_presses)} presses")
+    rep.check("no question to the resident", _first(events, "notification", topic="question") is None)
+    bad = {rid: p for rid, p in ((rid, safety_problems(x)) for rid, x in runs.items()) if p}
+    rep.check("safety rules in every run (C-04, FR-08, FR-11, C-09)", not bad, json.dumps(bad) if bad else "")
+    rep.check("the robot is back at the dock", _robot_back(events))
+
+    start = _first(events, "situation")
+    t0 = start.t if start else 0.0
+    press = all_presses[0] if all_presses else None
+    answer = None
+    if press is not None and r is not None:
+        answer = next(
+            (e for e in r.steps if e.t > press.t and e.data.get("step") == "check" and e.data.get("answer")), None
+        )
+    rep.numbers = {
+        "trigger_to_press_s": _seconds(press.t - t0 if press else None),
+        "press_to_check_answer_s": _seconds(answer.t - press.t if press and answer else None),
+        "trigger_to_robot_back_s": _seconds(max((e.t for e in events if e.kind == "robot"), default=t0) - t0),
+        "check_answer": answer.data.get("answer") if answer else None,
+    }
+    return rep
+
+
 # --- demo scenario 1 -------------------------------------------------------------------------------
 
 
@@ -391,13 +445,16 @@ def summary(reports: list[Report]) -> dict[str, Any]:
 
 def aggregate(reports: list[Report]) -> dict[str, Any]:
     """Over several rounds of leave_home: the numbers the slides use."""
+    op = [r for r in reports if r.scenario == "one_press"]
+    to_press = [r.numbers["trigger_to_press_s"] for r in op if r.numbers.get("trigger_to_press_s") is not None]
+    answers = [r.numbers.get("check_answer") for r in op if r.numbers.get("check_answer")]
     lh = [r for r in reports if r.scenario == "leave_home"]
-    first = [r.numbers["trigger_to_first_press_s"] for r in lh if r.numbers.get("trigger_to_first_press_s")]
     rates = [r.numbers["press_check_success_rate"] for r in lh if r.numbers.get("press_check_success_rate") is not None]
     return {
-        "rounds": len(reports),
+        "reports": len(reports),
         "passed": sum(r.passed for r in reports),
-        "leave_home_trigger_to_first_press_s_mean": _seconds(mean(first)) if first else None,
+        "one_press_trigger_to_press_s_mean": _seconds(mean(to_press)) if to_press else None,
+        "one_press_check_success_rate": round(answers.count("yes") / len(answers), 2) if answers else None,
         "leave_home_press_check_success_rate_mean": round(mean(rates), 2) if rates else None,
     }
 
@@ -409,6 +466,8 @@ async def judge(url: str, password: str, names: list[str], speed: float, rounds:
             events, devices, situation = await play(url, password, name, speed, timeout_s)
             if name == "leave_home":
                 reports.append(judge_leave_home(events, situation, speed))
+            elif name == "one_press":
+                reports.append(judge_one_press(events, situation, speed))
             else:
                 reports.append(judge_new_control(events, devices, speed))
     return reports
