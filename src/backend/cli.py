@@ -108,6 +108,7 @@ def _hand(args) -> int:
     import asyncio
 
     from backend.common.settings import HubSettings, load
+    from backend.hub.orchestrator import HOLD_S, PUSH_MS
     from backend.hub.ral.linear_actuators import HandError, LinearActuatorsRal
 
     s = load(HubSettings, "hub.yaml")
@@ -116,14 +117,17 @@ def _hand(args) -> int:
         print("set serial_port in settings/hub.yaml or pass --port", file=sys.stderr)
         return 1
     ral = LinearActuatorsRal(port, [a.id for a in s.actuators])
+    push_ms = args.ms if args.ms is not None else PUSH_MS
+    hold_s = args.hold_s if args.hold_s is not None else HOLD_S
 
     async def go() -> None:
         try:
             if args.action == "ping":
                 print("OK PING " + await ral.ping())
             elif args.action == "press":
-                await ral.press(args.actuator, args.ms)
+                await ral.press(args.actuator, push_ms)
                 if not args.hold:
+                    await asyncio.sleep(hold_s)  # on the switch, as the hub does
                     await ral.release(args.actuator)
             elif args.action == "release":
                 await ral.release(args.actuator)
@@ -216,7 +220,8 @@ def main(argv: list[str] | None = None) -> int:
     hd = sub.add_parser("hand", help="move the linear actuators by hand (bench, reset); the hub must not be running")
     hd.add_argument("action", choices=["ping", "press", "release", "stop", "reset"])
     hd.add_argument("actuator", nargs="?", default="A1")
-    hd.add_argument("--ms", type=int, default=400, help="push time for press")
+    hd.add_argument("--ms", type=int, help="push time for press; default PUSH_MS, as the hub pushes")
+    hd.add_argument("--hold-s", type=float, help="seconds on the switch before the release; default HOLD_S")
     hd.add_argument("--hold", action="store_true", help="press without the release after it")
     hd.add_argument("--port", help="instead of serial_port in settings/hub.yaml")
     hd.set_defaults(func=_hand)

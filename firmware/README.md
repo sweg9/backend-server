@@ -24,7 +24,7 @@ Arduino sketches for the hand. The hub on the home laptop talks to the board ove
 | 9, 10, 11, 12 | a second BTS7960 | A2, the same roles in the same order. Not wired on the bench yet |
 | `LED_BUILTIN` | none | On while the actuator moves |
 
-- Travel is timed, not measured. In `bench.ino`, `moveMm` runs the motor at full duty for `mm / SPEED_MM_S` seconds; `SPEED_MM_S` (8 mm/s) is an estimate. In `actuator.ino` the hub gives the push time in ms (`PUSH_MS` in `src/backend/hub/orchestrator.py`, 400 ms, about 3 mm at 8 mm/s: tune it on the panel). Back runs 1.2 times the push plus 100 ms, so the actuator always reaches its end switch and does not drift.
+- Travel is timed, not measured. In `bench.ino`, `moveMm` runs the motor at full duty for `mm / SPEED_MM_S` seconds; `SPEED_MM_S` (8 mm/s) is an estimate. In `actuator.ino` the hub gives the push time in ms (`PUSH_MS` in `src/backend/hub/orchestrator.py`, 2000 ms: the demo switch went down there on the bench, 2026-11-26; then it stays out `HOLD_S`, 2 s, before `RELEASE`). Back runs 1.2 times the push plus 100 ms, so the actuator always reaches its end switch and does not drift.
 - Only one direction pin is driven at a time; the other is set to 0 first.
 
 ## Serial command format
@@ -62,11 +62,14 @@ Safety in the board itself, so the hand stops even if the hub or the USB link di
 
 ```sh
 uv run backend hand ping
-uv run backend hand press A1 --ms 400      # press, then release
+uv run backend hand press A1               # as the hub: push 2000 ms (PUSH_MS), 2 s on the switch (HOLD_S), release
+uv run backend hand press A1 --ms 1500 --hold-s 1   # other times, to tune them on the panel
 uv run backend hand press A1 --hold        # press and stay out (it goes back by itself after 5 s)
 uv run backend hand release A1
 uv run backend hand stop
 uv run backend hand reset                  # after a stop: pull everything back, accept PRESS again
 ```
 
-On the hub: `hand: linear_actuators` and `serial_port` (on Windows `COM3` or the like, as the Arduino IDE or Device Manager shows; on the Mac `/dev/cu.usbmodem…` for an Uno, `ls /dev/cu.*`) in `settings/hub.yaml`. `go_to_spot` only logs: the team member holds or pushes the actuators, and the orchestrator shows the move for 2 s. Waiting for the presenter's confirmation in the app (wiki Modules) is not built.
+Each `backend hand` opens the port, and opening the port restarts an Uno or a Nano (it prints `READY` after about 1.5 s). So a `stop` from an earlier command is gone by the next one. And a `release` within 5 s of `press --hold` restarts the board while the actuator is out: the board answers `OK RELEASE` without moving, so wait the 5 s (it pulls back by itself) or send `reset`. The hub keeps the port open, so its `STOP` holds until `RESET`.
+
+On the hub: `hand: linear_actuators` and `serial_port` (on Windows `COM6` on the demo laptop, or the port as the Arduino IDE or Device Manager shows; on the Mac `/dev/cu.usbmodem…` for an Uno, `ls /dev/cu.*`) in `settings/hub.yaml`. `go_to_spot` only logs: the team member holds or pushes the actuators, and the orchestrator shows the move for 2 s. Waiting for the presenter's confirmation in the app (wiki Modules) is not built.

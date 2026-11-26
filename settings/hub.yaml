@@ -2,8 +2,8 @@
 # Secrets are never here: HUB_TOKEN, APP_PASSWORD_HASH and the AWS credentials come from the environment (C-10).
 server_url: wss://nova.example.com/api/ws/hub   # the server on AWS; the domain is still open
 kms_key_id: null             # the KMS key that seals photos (C-05); set when the AWS account is ready
-hand: script                 # linear_actuators | unity_sim | script (FR-11, C-13)
-serial_port: null            # with linear_actuators, e.g. COM3 (Windows) or /dev/cu.usbmodem14101 (Mac); see firmware/README.md
+hand: linear_actuators       # linear_actuators | unity_sim | script (FR-11, C-13); the demo drives the real actuators
+serial_port: COM6            # the demo board on the Windows demo laptop (COM3, COM4 there are Bluetooth); on a Mac /dev/cu.usbmodem…; see firmware/README.md
 camera_index: 0
 camera_api: auto             # OpenCV backend. auto: dshow on Windows, avfoundation on a Mac, v4l2 on Linux
 photo_max_side: 1280         # longest side of a photo sent to the enclave
