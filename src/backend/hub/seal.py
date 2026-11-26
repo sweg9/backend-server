@@ -34,9 +34,12 @@ class KmsDataKeys:
 
     def __init__(self, key_id: str, client: Any = None):
         if client is None:
-            import boto3  # only the hub on a real home network needs it
+            try:
+                import boto3  # only the hub on a real home network needs it
 
-            client = boto3.client("kms")
+                client = boto3.client("kms")
+            except Exception as e:  # no credentials, a missing extra: the photo stays home (C-05)
+                raise SealError(f"no KMS client ({type(e).__name__})") from e
         self.key_id = key_id
         self.client = client
 

@@ -15,8 +15,9 @@ export BACKEND_SETTINGS_DIR=$DIR
 # boto3 uses the `aws login` session itself and refreshes it (needs awscrt); exported credentials expire in minutes.
 UVRUN=(uv run --with awscrt)
 read -rsp "HUB_TOKEN from setup: " HUB_TOKEN; echo; export HUB_TOKEN
-export APP_PASSWORD_HASH=$("${UVRUN[@]}" backend hash-password)
-"${UVRUN[@]}" backend seed-demo
+# `python -m backend.cli`, not `backend`: the console script runs .venv's python, which does not see --with.
+export APP_PASSWORD_HASH=$("${UVRUN[@]}" python -m backend.cli hash-password)
+"${UVRUN[@]}" python -m backend.cli seed-demo
 echo "API: http://$IP/api   (sign in with the password you just chose)"
 export AWS_REGION
-exec "${UVRUN[@]}" backend hub --stdout
+exec "${UVRUN[@]}" python -m backend.cli hub --stdout
