@@ -13,6 +13,12 @@ async def list_mappings(request: Request):
     return await relay(request)
 
 
+@router.patch("/mappings/{mapping_id}")
+async def update_mapping(request: Request, mapping_id: str):
+    """FR-02. Relayed to the hub; the mapping goes back to Pending (C-08)."""
+    return await relay(request)
+
+
 @router.post("/mappings/{mapping_id}/confirm")
 async def confirm_mapping(request: Request, mapping_id: str):
     """FR-02. Relayed to the hub."""

@@ -201,3 +201,29 @@ def test_a_control_found_later_stands_beside_the_others_at_its_spot(hub):
     assert at[new_id]["spot_id"] == at[known_id]["spot_id"] == "living_wall_1"
     assert at[new_id]["press_spot"] == at[known_id]["press_spot"]
     assert at[new_id]["at"]["x"] > at[known_id]["at"]["x"]
+
+
+@pytest.mark.fr("FR-02")
+def test_changing_the_device_of_a_mapping_sends_it_back_to_pending(hub):
+    verified = next(m for m in hub.call("GET", "/mappings").body if m["status"] == "Verified")
+    other = next(d for d in hub.call("GET", "/devices").body if d["device_id"] != verified["device_id"])
+    path = f"/mappings/{verified['mapping_id']}"
+
+    r = hub.call("PATCH", path, {"device_id": other["device_id"]})
+    assert r.status == 200
+    check_schema("PATCH", "/mappings/{mapping_id}", 200, r.body)
+    assert r.body["device_id"] == other["device_id"] and r.body["status"] == "Pending"  # C-08
+    event = [d for k, d in hub.events if k == "mapping"][-1]
+    assert event["previous_device_id"] == verified["device_id"]
+
+    assert hub.call("POST", f"{path}/confirm").body["status"] == "Verified"
+    assert hub.call("PATCH", path, {"device_id": other["device_id"]}).body["status"] == "Verified"  # no change
+
+
+def test_changing_a_mapping_checks_its_input(hub):
+    m = hub.call("GET", "/mappings").body[0]
+    path = f"/mappings/{m['mapping_id']}"
+    assert hub.call("PATCH", path, {"device_id": "dev_nope"}).body["code"] == "unknown_device"
+    assert hub.call("PATCH", "/mappings/mp_nope", {"device_id": m["device_id"] or "x"}).status == 404
+    assert hub.call("PATCH", path, {}).status == 422
+    assert hub.call("PATCH", path, {"device_id": "x", "status": "Verified"}).status == 422

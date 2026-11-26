@@ -88,6 +88,10 @@ class DeviceUpdate(Body):
     risk: Risk | None = None
 
 
+class MappingUpdate(Body):
+    device_id: str = Field(min_length=1)
+
+
 class RoutineCreate(Body):
     mapping_id: str
     action: DeviceAction
@@ -142,6 +146,7 @@ class AppHandlers:
         r("GET", "/devices", self.devices)
         r("PATCH", "/devices/{device_id}", self.update_device)
         r("GET", "/mappings", self.mappings)
+        r("PATCH", "/mappings/{mapping_id}", self.update_mapping)
         r("POST", "/mappings/{mapping_id}/confirm", self.confirm_mapping)
         r("POST", "/mappings/{mapping_id}/reject", self.reject_mapping)
         r("GET", "/routines", self.routines)
@@ -285,6 +290,22 @@ class AppHandlers:
         m.updated_at = now()
         db.flush()
         self._queue("mapping", mapping_view(m))
+        return AppResponse(status=200, body=mapping_view(m))
+
+    async def update_mapping(self, db: Db, req: AppRequest, p) -> AppResponse:
+        """The resident says which device the control really runs. Back to Pending until a check or the
+        resident's confirm makes it Verified again, so no routine runs it meanwhile (C-08)."""
+        body = MappingUpdate.model_validate(req.body or {})
+        m = self._mapping(db, p["mapping_id"])
+        if db.get(Device, body.device_id) is None:
+            raise ApiError(404, "unknown_device", "Unknown device")
+        if body.device_id == m.device_id:
+            return AppResponse(status=200, body=mapping_view(m))
+        before = m.device_id
+        m.device_id, m.device_score = body.device_id, None
+        m.status, m.status_reason, m.updated_at = MappingStatus.PENDING, "device changed by the resident", now()
+        db.flush()
+        self._queue("mapping", {**mapping_view(m), "previous_device_id": before})
         return AppResponse(status=200, body=mapping_view(m))
 
     async def confirm_mapping(self, db: Db, _req, p) -> AppResponse:
