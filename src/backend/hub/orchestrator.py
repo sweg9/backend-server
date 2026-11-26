@@ -53,7 +53,8 @@ log = logging.getLogger(__name__)
 Emit = Callable[[str, dict[str, Any]], Awaitable[None]]
 
 HOME_SPOT = "dock"
-PUSH_MS = 400  # how long an actuator pushes; tuned with the real hand
+PUSH_MS = 2000  # how long an actuator pushes: the demo switch went down at 2000 ms on the bench (2026-11-26)
+HOLD_S = 2.0  # how long it stays out on the switch before it pulls back; the board pulls back by itself at 5 s
 ACTIVE = ("received", "planning", "waiting_for_answer", "running")
 EMERGENCY = "emergency stop"
 
@@ -642,6 +643,7 @@ class Orchestrator:
             t = now()
             await self.set_task(Step.PRESS, "press again" if again else "press", Stage.S6, ctx, Channel.ARM)
             await self.ral.press(self.actuator, PUSH_MS)
+            await self.wait(HOLD_S)
             await self.ral.release(self.actuator)
             self.robot.state = "checking"
             await status("checking")
