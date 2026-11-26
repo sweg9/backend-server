@@ -16,7 +16,7 @@ sudo systemctl enable --now docker nitro-enclaves-allocator.service
 D="sudo docker"
 
 # 2. The code
-[ -d backend-server ] || git clone --depth 1 https://github.com/sweg9/backend-server
+if [ -d backend-server ]; then git -C backend-server pull -q --ff-only; else git clone --depth 1 https://github.com/sweg9/backend-server; fi
 [ -d ai-engine ] || { git clone https://github.com/sweg9/ai-engine && git -C ai-engine checkout -q $AI_ENGINE_REV; }
 [ -d sdk-c ] || git clone --depth 1 https://github.com/aws/aws-nitro-enclaves-sdk-c sdk-c
 
@@ -28,7 +28,7 @@ fi
 # 4. The enclave image and its EIF. Test models: the people detector (COCO yolo11s, FR-10); the control
 #    detector and the effect check are not in a repo yet, so the test settings leave them out (they answer safely).
 mkdir -p ctx/engine/linker ctx/engine/models
-cp -r backend-server ctx/ && rm -rf ctx/backend-server/.git
+rm -rf ctx/backend-server && cp -r backend-server ctx/ && rm -rf ctx/backend-server/.git
 cp ai-engine/linker/prior.json ctx/engine/linker/
 [ -f ctx/engine/models/yolo11s.pt ] || curl -fsSL -o ctx/engine/models/yolo11s.pt \
   https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11s.pt
