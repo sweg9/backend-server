@@ -40,6 +40,7 @@ from backend.hub.db.models import (
     Session,
     Situation,
 )
+from backend.hub.home_map import home_layout
 from backend.hub.orchestrator import HOME_SPOT, Busy, Orchestrator
 from backend.hub.prefs import PROACTIVE_KEY, proactive
 from backend.hub.scenario import SCENARIOS
@@ -156,6 +157,7 @@ class AppHandlers:
         r("POST", "/situations/{situation_id}/dismiss", self.dismiss)
         r("GET", "/visits", self.visits)
         r("GET", "/robot", self.robot)
+        r("GET", "/map", self.map)
         r("POST", "/robot/route", self.route)
         r("POST", "/runs/{run_id}/retry", self.retry)
         r("POST", "/runs/{run_id}/leave", self.leave)
@@ -424,6 +426,9 @@ class AppHandlers:
 
     async def robot(self, _db, _req, _p) -> AppResponse:
         return AppResponse(status=200, body=self._orch().robot.view())
+
+    async def map(self, db: Db, _req, _p) -> AppResponse:
+        return AppResponse(status=200, body=home_layout(db))
 
     def _spot_of(self, db: Db, stop: str) -> str:
         """A stop is a spot id, a control id (its press spot) or a device id (the press spot of the control

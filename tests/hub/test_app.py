@@ -171,3 +171,33 @@ def test_the_demo_seed_refuses_a_database_with_records():
 def test_seeded_intents_read_well(hub):
     intents = {r["intent"] for r in hub.call("GET", "/runs").body}
     assert "turn off the TV" in intents and "turn off the living room ceiling light" in intents
+
+
+@pytest.mark.fr("FR-09")
+def test_map_draws_every_control_and_device_of_the_demo_home(hub):
+    r = hub.call("GET", "/map")
+    assert r.status == 200
+    check_schema("GET", "/map", 200, r.body)
+    controls = {c["control_id"] for c in hub.call("GET", "/controls").body}
+    devices = {d["device_id"] for d in hub.call("GET", "/devices").body}
+    assert {c["control_id"] for c in r.body["controls"]} == controls
+    assert {d["device_id"] for d in r.body["devices"]} == devices
+    assert r.body["rooms"] and r.body["walls"]
+
+
+@pytest.mark.fr("FR-09")
+def test_a_control_found_later_stands_beside_the_others_at_its_spot(hub):
+    from sqlalchemy import select
+
+    from backend.hub.db.models import Control
+    from backend.hub.registry import add_control
+
+    with hub.db() as s:
+        known = s.scalar(select(Control).where(Control.press_spot_id == "living_wall_1"))
+        new = add_control(s, "switch", "off", 0.9, ["press"], [0.5, 0.4], "living_wall_1")
+        s.commit()
+        known_id, new_id = known.control_id, new.control_id
+    at = {c["control_id"]: c for c in hub.call("GET", "/map").body["controls"]}
+    assert at[new_id]["spot_id"] == at[known_id]["spot_id"] == "living_wall_1"
+    assert at[new_id]["press_spot"] == at[known_id]["press_spot"]
+    assert at[new_id]["at"]["x"] > at[known_id]["at"]["x"]

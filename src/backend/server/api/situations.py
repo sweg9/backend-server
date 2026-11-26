@@ -43,6 +43,12 @@ async def get_robot(request: Request):
     return await relay(request)
 
 
+@router.get("/map", tags=["Robot"])
+async def get_map(request: Request):
+    """FR-09. The home as the Dashboard draws it."""
+    return await relay(request)
+
+
 @router.post("/robot/route", tags=["Robot"])
 async def route_robot(request: Request):
     """FR-09, FR-10. A move order; the hub passes the safety gate before every leg (C-04)."""

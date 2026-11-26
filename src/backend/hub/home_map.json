@@ -1,0 +1,416 @@
+{
+ "_note": "GET /map for the demo home (demo_home.json), in the Dashboard's HomeLayout frame: centimetres, x to the right, y down, seen from above. rooms, walls, furniture and ceiling are live-demo src/mocks/layout.ts as of 2026-11-26, measured from the map team's LiDAR scan of two dorm rooms. spots and devices are ESTIMATES placed by backend-server: the demo home's living room is drawn in Room A, the bedroom in Room B, the kitchen in Entry A, the hall in the Lobby. The map team replaces them with the positions they mark on the scan. Numbers only, no photos (C-05).",
+ "ceiling": 249,
+ "dock": {
+  "x": 350,
+  "y": 440
+ },
+ "spots": {
+  "living_wall_1": {
+   "at": {
+    "x": 244,
+    "y": 526
+   },
+   "press_spot": {
+    "x": 244,
+    "y": 575
+   }
+  },
+  "living_tv": {
+   "at": {
+    "x": 200,
+    "y": 826
+   },
+   "press_spot": {
+    "x": 200,
+    "y": 775
+   }
+  },
+  "hall_wall_1": {
+   "at": {
+    "x": 300,
+    "y": 371
+   },
+   "press_spot": {
+    "x": 300,
+    "y": 420
+   }
+  },
+  "kitchen_wall_1": {
+   "at": {
+    "x": 252,
+    "y": 400
+   },
+   "press_spot": {
+    "x": 215,
+    "y": 400
+   }
+  },
+  "bedroom_wall_1": {
+   "at": {
+    "x": 560,
+    "y": 526
+   },
+   "press_spot": {
+    "x": 560,
+    "y": 575
+   }
+  },
+  "bedroom_purifier": {
+   "at": {
+    "x": 520,
+    "y": 690
+   },
+   "press_spot": {
+    "x": 520,
+    "y": 650
+   }
+  },
+  "bedroom_strip": {
+   "at": {
+    "x": 495,
+    "y": 826
+   },
+   "press_spot": {
+    "x": 495,
+    "y": 775
+   }
+  }
+ },
+ "devices": {
+  "Living room ceiling light": {
+   "x": 195,
+   "y": 676
+  },
+  "Living room stand lamp": {
+   "x": 225,
+   "y": 700
+  },
+  "TV": {
+   "x": 200,
+   "y": 810
+  },
+  "Kitchen light": {
+   "x": 150,
+   "y": 445
+  },
+  "Kitchen fan": {
+   "x": 200,
+   "y": 480
+  },
+  "Bedroom ceiling light": {
+   "x": 508,
+   "y": 676
+  },
+  "Air purifier": {
+   "x": 520,
+   "y": 700
+  },
+  "Heater": {
+   "x": 530,
+   "y": 812
+  }
+ },
+ "rooms": [
+  {
+   "room": "Room A",
+   "x": 40,
+   "y": 520,
+   "w": 310,
+   "h": 312
+  },
+  {
+   "room": "Room B",
+   "x": 350,
+   "y": 520,
+   "w": 315,
+   "h": 312
+  },
+  {
+   "room": "Entry A",
+   "x": 40,
+   "y": 370,
+   "w": 218,
+   "h": 150
+  },
+  {
+   "room": "Entry B",
+   "x": 445,
+   "y": 380,
+   "w": 175,
+   "h": 140
+  },
+  {
+   "room": "Lobby",
+   "x": 258,
+   "y": 365,
+   "w": 187,
+   "h": 147
+  },
+  {
+   "room": "Hallway",
+   "x": 30,
+   "y": 148,
+   "w": 640,
+   "h": 232
+  },
+  {
+   "room": "Hallway",
+   "x": 620,
+   "y": 380,
+   "w": 50,
+   "h": 140,
+   "label": false
+  }
+ ],
+ "walls": [
+  [
+   40,
+   832,
+   665,
+   832,
+   14
+  ],
+  [
+   40,
+   520,
+   40,
+   832,
+   12
+  ],
+  [
+   665,
+   520,
+   665,
+   832,
+   12
+  ],
+  [
+   350,
+   520,
+   350,
+   832,
+   10
+  ],
+  [
+   40,
+   520,
+   150,
+   520,
+   12
+  ],
+  [
+   240,
+   520,
+   470,
+   520,
+   14
+  ],
+  [
+   555,
+   520,
+   665,
+   520,
+   12
+  ],
+  [
+   40,
+   370,
+   40,
+   520,
+   12
+  ],
+  [
+   620,
+   380,
+   620,
+   520,
+   10
+  ],
+  [
+   258,
+   365,
+   258,
+   420,
+   10
+  ],
+  [
+   258,
+   495,
+   258,
+   520,
+   10
+  ],
+  [
+   445,
+   380,
+   445,
+   420,
+   10
+  ],
+  [
+   445,
+   495,
+   445,
+   520,
+   10
+  ],
+  [
+   30,
+   370,
+   258,
+   370,
+   18
+  ],
+  [
+   445,
+   380,
+   620,
+   380,
+   12
+  ],
+  [
+   30,
+   148,
+   670,
+   148,
+   12
+  ],
+  [
+   30,
+   148,
+   30,
+   370,
+   12
+  ],
+  [
+   670,
+   148,
+   670,
+   520,
+   12
+  ]
+ ],
+ "furniture": [
+  {
+   "kind": "bed",
+   "x": 42,
+   "y": 522,
+   "w": 106,
+   "d": 206,
+   "h": 60
+  },
+  {
+   "kind": "wardrobe",
+   "x": 42,
+   "y": 736,
+   "w": 30,
+   "d": 90,
+   "h": 200
+  },
+  {
+   "kind": "desk",
+   "x": 72,
+   "y": 742,
+   "w": 78,
+   "d": 84,
+   "h": 75
+  },
+  {
+   "kind": "bed",
+   "x": 238,
+   "y": 522,
+   "w": 108,
+   "d": 200,
+   "h": 60
+  },
+  {
+   "kind": "desk",
+   "x": 252,
+   "y": 726,
+   "w": 70,
+   "d": 100,
+   "h": 75
+  },
+  {
+   "kind": "wardrobe",
+   "x": 322,
+   "y": 726,
+   "w": 24,
+   "d": 100,
+   "h": 200
+  },
+  {
+   "kind": "bed",
+   "x": 354,
+   "y": 522,
+   "w": 110,
+   "d": 204,
+   "h": 60
+  },
+  {
+   "kind": "wardrobe",
+   "x": 354,
+   "y": 738,
+   "w": 26,
+   "d": 88,
+   "h": 200
+  },
+  {
+   "kind": "desk",
+   "x": 380,
+   "y": 730,
+   "w": 76,
+   "d": 96,
+   "h": 75
+  },
+  {
+   "kind": "bed",
+   "x": 557,
+   "y": 522,
+   "w": 104,
+   "d": 214,
+   "h": 60
+  },
+  {
+   "kind": "desk",
+   "x": 557,
+   "y": 740,
+   "w": 86,
+   "d": 88,
+   "h": 75
+  },
+  {
+   "kind": "wardrobe",
+   "x": 643,
+   "y": 740,
+   "w": 18,
+   "d": 88,
+   "h": 200
+  },
+  {
+   "kind": "wardrobe",
+   "x": 42,
+   "y": 378,
+   "w": 32,
+   "d": 140,
+   "h": 200
+  },
+  {
+   "kind": "shelf",
+   "x": 78,
+   "y": 388,
+   "w": 62,
+   "d": 76,
+   "h": 190
+  },
+  {
+   "kind": "shelf",
+   "x": 575,
+   "y": 450,
+   "w": 42,
+   "d": 68,
+   "h": 120
+  }
+ ]
+}
