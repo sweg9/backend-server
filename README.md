@@ -98,6 +98,17 @@ uv run backend hub --stdout --demo-scenarios --server-url ws://127.0.0.1:8000/ws
 
 **The demo in one command.** `scripts/demo.sh up` starts a fresh demo home, the server, the hub with the demo scenarios and the Dashboard (`../live-demo`, `npm run dev:real`); Ctrl-C stops all of them. In another terminal, `scripts/demo.sh play 1` plays scenario 1 and `scripts/demo.sh play 3` the short scenario 3, each judged as below. The first `up` asks for an app password and keeps only its hash in `data/demo.env`. Logs go to `data/demo/`. `--keep-db` keeps the records, `--no-web` leaves out the Dashboard.
 
+**The hub on Windows** (the demo laptop may be one). Install [uv](https://docs.astral.sh/uv/) and Node.js, then in PowerShell:
+
+```powershell
+uv sync --extra server --extra hub
+.\scripts\demo.ps1 up          # -KeepDb, -NoWeb as above; if scripts are blocked:
+                               # powershell -ExecutionPolicy Bypass -File .\scripts\demo.ps1 up
+.\scripts\demo.ps1 play 1      # in a second window; then play 3
+```
+
+It does what `demo.sh` does and shares `data\demo.env` with it. On Windows, `camera_api: auto` opens the camera through DirectShow, which also takes the exposure lock (FR-08). OpenCV's default there (Media Foundation) opens slowly and takes no exposure values. For the Arduino, set `serial_port: COM3` (the port the Arduino IDE shows) in `settings/hub.yaml`. `demo.ps1` has not run on Windows yet; on the first try, look at `data\demo\*.err.log` if something stops.
+
 With `--demo-scenarios`, `POST /scenarios/new_control/start` (demo scenario 1) or `one_press` (demo scenario 3 as shown: TV and heater off over Wi-Fi, one light pressed once, about 15 s) plays fixed answers through the real orchestrator; `leave_home` is scenario 3 with every failure path, for the Dashboard and tests; watch it on `/ws/app`. Without the flag those routes answer 404.
 
 **Scenario judge.** With the pair running, `backend judge` plays scenario 1 and the short scenario 3 (`--scenario all` adds `leave_home`) through the API as the Dashboard would, plays the resident's part (approves questions, retries the unsure run once), and prints pass or fail with the numbers for the slides: trigger to first press, press to the check's answer, the check success rate (`src/backend/tools/judge.py`). It also checks the safety rules in every run: a gate pass right before each press (C-04), at most 2 presses (FR-11), no press after unsure (FR-08), wireless first (C-09).

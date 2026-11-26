@@ -31,7 +31,7 @@ def enclave_link(s: ServerSettings, settings_dir: Path = SETTINGS_DIR) -> Enclav
         connect = vsock(s.enclave_cid, s.enclave_port)
 
     def read(name: str) -> dict:
-        with open(settings_dir / name) as f:  # an absolute name stays as it is
+        with open(settings_dir / name, encoding="utf-8") as f:  # an absolute name stays as it is
             return yaml.safe_load(f)
 
     def settings() -> tuple[dict, dict, dict]:

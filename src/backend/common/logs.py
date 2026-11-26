@@ -43,7 +43,7 @@ def setup(mode: str, log_file: str | None = None, max_mb: int = 10, keep_files: 
         path = Path(log_file).expanduser()
         path.parent.mkdir(parents=True, exist_ok=True)
         handler: logging.Handler = logging.handlers.RotatingFileHandler(
-            path, maxBytes=max_mb * 1024 * 1024, backupCount=keep_files
+            path, maxBytes=max_mb * 1024 * 1024, backupCount=keep_files, encoding="utf-8"
         )
     else:
         handler = logging.StreamHandler(sys.stdout)

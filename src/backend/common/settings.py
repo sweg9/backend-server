@@ -33,12 +33,13 @@ class HubSettings(Strict):
     hand: HandOption
     serial_port: str | None
     camera_index: int
+    camera_api: Literal["auto", "dshow", "msmf", "avfoundation", "v4l2", "any"]
     photo_max_side: int
     photo_jpeg_quality: int
     camera_flush_frames: int
     camera_lock_exposure: bool
-    camera_exposure_auto: float
-    camera_exposure_manual: float
+    camera_exposure_auto: float | None  # None: the known value for camera_api (camera.EXPOSURE_VALUES)
+    camera_exposure_manual: float | None
     camera_settle_frames: int
     log_file: str
     log_max_mb: int
@@ -124,7 +125,7 @@ M = TypeVar("M", bound=BaseModel)
 
 
 def load(model: type[M], name: str, directory: Path = SETTINGS_DIR) -> M:
-    with open(directory / name) as f:
+    with open(directory / name, encoding="utf-8") as f:  # not the locale's (cp949 on a Korean Windows)
         return model.model_validate(yaml.safe_load(f))
 
 

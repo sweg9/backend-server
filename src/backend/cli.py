@@ -98,7 +98,7 @@ def _judge(args) -> int:
     if args.rounds > 1:
         print(json.dumps(aggregate(reports), indent=2))
     if args.json:
-        with open(args.json, "w") as f:
+        with open(args.json, "w", encoding="utf-8") as f:
             json.dump(summary(reports) | {"aggregate": aggregate(reports)}, f, indent=2)
     return 0 if all(r.passed for r in reports) else 1
 

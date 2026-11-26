@@ -3,14 +3,15 @@
 server_url: wss://nova.example.com/api/ws/hub   # the server on AWS; the domain is still open
 kms_key_id: null             # the KMS key that seals photos (C-05); set when the AWS account is ready
 hand: script                 # linear_actuators | unity_sim | script (FR-11, C-13)
-serial_port: null            # with linear_actuators, e.g. /dev/cu.usbmodem14101 (Mac, Uno); see firmware/README.md
+serial_port: null            # with linear_actuators, e.g. COM3 (Windows) or /dev/cu.usbmodem14101 (Mac); see firmware/README.md
 camera_index: 0
+camera_api: auto             # OpenCV backend. auto: dshow on Windows, avfoundation on a Mac, v4l2 on Linux
 photo_max_side: 1280         # longest side of a photo sent to the enclave
 photo_jpeg_quality: 85       # 0 to 100
 camera_flush_frames: 3       # frames dropped before a photo, so it is not an old one from the buffer
 camera_lock_exposure: true   # lock the exposure for the photos after a command (FR-08 camera check)
-camera_exposure_auto: 3      # CAP_PROP_AUTO_EXPOSURE for auto; driver-specific: V4L2 (Linux) 3, DirectShow (Windows) 0.75
-camera_exposure_manual: 1    # the same for manual: V4L2 1, DirectShow 0.25
+camera_exposure_auto: null   # CAP_PROP_AUTO_EXPOSURE for auto; null: known for dshow (0.75) and v4l2 (3)
+camera_exposure_manual: null # the same for manual; null: dshow 0.25, v4l2 1. Other APIs: set both or no lock
 camera_settle_frames: 20     # frames read with auto exposure before it is locked (about 0.7 s at 30 fps)
 log_file: data/hub/hub.log   # an Alloy on this laptop pushes it to Loki on AWS
 log_max_mb: 10

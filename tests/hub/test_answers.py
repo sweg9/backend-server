@@ -346,3 +346,43 @@ def test_without_a_kms_key_no_photo_leaves_the_home():
 
     r = reader(Camera([np.zeros((60, 80, 3), np.uint8)] * 3), keys=no_keys)
     assert run(r.photo()) is None
+
+
+def test_auto_picks_directshow_on_windows_and_its_exposure_values():
+    from backend.hub.camera import camera_api, exposure_for
+
+    assert camera_api("auto", "win32") == "dshow"
+    assert camera_api("auto", "darwin") == "avfoundation"
+    assert camera_api("auto", "linux") == "v4l2"
+    assert camera_api("msmf", "win32") == "msmf"  # set by hand: kept
+    e = exposure_for("dshow", True, None, None, 20)
+    assert (e.auto, e.manual, e.settle_frames) == (0.75, 0.25, 20)
+    assert exposure_for("dshow", True, 0.5, 0.1, 20).auto == 0.5  # set values win
+    assert exposure_for("dshow", False, None, None, 20) is None
+
+
+def test_an_api_without_known_exposure_values_takes_photos_unlocked(caplog):
+    from backend.hub.camera import exposure_for
+
+    assert exposure_for("avfoundation", True, None, None, 20) is None
+    assert "camera_api avfoundation" in caplog.text
+    assert exposure_for("avfoundation", True, 3, 1, 20) is not None
+
+
+def test_the_opener_asks_opencv_for_the_chosen_api(monkeypatch):
+    import cv2
+
+    from backend.hub.camera import opencv_opener
+
+    seen = []
+    monkeypatch.setattr(cv2, "VideoCapture", lambda i, api: seen.append((i, api)))
+    opencv_opener("dshow")(1)
+    opencv_opener("any")(0)
+    assert seen == [(1, cv2.CAP_DSHOW), (0, cv2.CAP_ANY)]
+
+
+def test_the_hub_settings_load():
+    from backend.common.settings import HubSettings, load
+
+    s = load(HubSettings, "hub.yaml")
+    assert s.camera_api == "auto" and s.camera_exposure_auto is None
