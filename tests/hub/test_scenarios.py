@@ -209,7 +209,7 @@ def test_the_stop_cancels_the_open_runs_and_the_situation():
 
 
 @pytest.mark.fr("FR-02")
-def test_new_control_fixes_the_wrong_guess_and_adds_a_habit():
+def test_new_control_fixes_the_wrong_guess_and_maps_the_strip_with_caution():
     async def go():
         h = Hub()
         await h.play("new_control")
@@ -218,9 +218,12 @@ def test_new_control_fixes_the_wrong_guess_and_adds_a_habit():
         with h.db() as s:
             m = s.get(Mapping, fixed[0]["mapping_id"])
             assert m.status == "Verified" and m.device_id != fixed[0]["previous_device_id"]
-            assert s.scalar(select(func.count()).select_from(Control)) == 9
+            assert s.scalar(select(func.count()).select_from(Control)) == 10
             assert s.scalar(select(Scan)).done_at is not None
-            assert s.scalar(select(Routine).where(Routine.mapping_id == m.mapping_id)).source == "habit"
+            assert s.scalar(select(Routine).where(Routine.mapping_id == m.mapping_id)) is None  # Hyunseo's flow
+            new_strips = select(Mapping).join(Control).where(Control.kind == "power_strip", Mapping.status == "Pending")
+            strip = s.scalar(new_strips)
+            assert strip.device_id is None  # C-08: never pressed until a person confirms
         assert "scan" in h.kinds()
 
     asyncio.run(go())
@@ -571,7 +574,7 @@ def test_one_press_turns_off_tv_and_heater_by_wifi_and_presses_one_light_once():
 
 @pytest.mark.fr("FR-02")
 def test_one_press_after_scenario_1_presses_the_stand_lamp_without_asking():
-    """Scenario 1 makes the stand lamp Verified with an ask-first routine; the demo still shows no question."""
+    """Scenario 1 makes the stand lamp Verified; the demo shows no question."""
 
     async def go():
         h = Hub()

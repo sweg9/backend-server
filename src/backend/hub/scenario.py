@@ -5,9 +5,10 @@ Started only by `POST /scenarios/{name}/start`, which answers 404 unless the hub
 trigger, the enclave's decisions, the wireless platforms and the camera's checks. Everything after
 that is the real hub: the orchestrator, the run entries, the records and the events.
 
-- `new_control` (demo scenario 1, FR-01 to FR-04): a scan finds a new switch and guesses "ceiling light
-  83%"; the resident flips it; the check shows the stand lamp changed, so the mapping is fixed and
-  Verified; a habit routine is added.
+- `new_control` (demo scenario 1, FR-01 to FR-03; Hyunseo's flow of 11/24, steps 2 and 3): a scan finds
+  a new switch and guesses "ceiling light 83%", and a new power strip by the TV, mapped with caution (what
+  it feeds is unknown, FR-06); the resident flips the switch; the check shows the stand lamp changed, so
+  the mapping is fixed and Verified. No routine: the flow shows none.
 - `one_press` (demo scenario 3 as shown, FR-05, FR-07 to FR-12): "you left home" comes in; TV and heater
   go off over Wi-Fi (shown on screen only); one light has no channel, so the robot visits it, passes the
   gate and presses once, and the check confirms it. The light is the switch of scenario 1 (the stand lamp)
@@ -36,16 +37,15 @@ from backend.common.vocab import (
     DeviceAction,
     Independence,
     MappingStatus,
-    RoutineSource,
     Stage,
     Trigger,
 )
 from backend.hub.channels.base import SendResult
-from backend.hub.db.models import Control, Device, Mapping, Routine, Scan
+from backend.hub.db.models import Control, Device, Mapping, Scan
 from backend.hub.orchestrator import Orchestrator
 from backend.hub.prefs import proactive
 from backend.hub.registry import add_control, add_crop, add_mapping, now, verify_mapping
-from backend.hub.views import control_view, mapping_view, routine_view
+from backend.hub.views import control_view, mapping_view
 
 NO_PHOTO = "(scenario: no photo)"
 
@@ -307,7 +307,9 @@ async def new_control(orch: Orchestrator) -> None:
     await orch.move_to("living_tv")
     orch.robot.state = "scanning"
     await orch.robot_event()
-    for frame in range(7, 10):
+    new_strip = None
+    strip_caution = "Power strip: what it feeds is unknown, so the robot never presses it until you confirm (FR-06)"
+    for frame in range(7, 11):
         dets = [
             detection(
                 "power_strip",
@@ -318,15 +320,39 @@ async def new_control(orch: Orchestrator) -> None:
                 caution=True,
                 reason="Power strip: not pressed by the robot unless the risk policy allows it",
                 score=0.88,
-            )
+            ),
+            detection("power_strip", [0.70, 0.74, 0.88, 0.88], "on", new_strip, None, True, strip_caution, 0.86),
         ]
         await scan_event(status="running", spot_id="living_tv", frame=frame, detections=dets, person=False)
+        if frame == 9:  # a new power strip: a Pending mapping with no device, so it is never pressed (C-08, FR-06)
+            with orch.db() as db:
+                c = add_control(
+                    db, ControlKind.POWER_STRIP, ControlState.ON, 0.86, ["press"], [0.79, 0.81], "living_tv"
+                )
+                m = add_mapping(
+                    db,
+                    c,
+                    None,
+                    0.3,
+                    before=add_crop(db, "device_before", NO_PHOTO),
+                    after=add_crop(db, "device_after", NO_PHOTO),
+                    device_box=[0.6, 0.5, 1.0, 0.95],
+                    change_score=0.0,
+                    device_type_seen=None,
+                    reason="power strip: what it feeds is unknown; a heater on it would be high risk",
+                )
+                db.commit()
+                new_strip = c.control_id
+                control_event, mapping_event = control_view(c), mapping_view(m)
+            await orch.emit("control", control_event)
+            await orch.emit("mapping", mapping_event)
+            await orch.notify("caution", strip_caution, level="warning", control_id=new_strip)
         await orch.wait(0.8)
     with orch.db() as db:
         row = db.get(Scan, scan_id)
-        row.done_at, row.found, row.skipped = now(), 2, 0
+        row.done_at, row.found, row.skipped = now(), 4, 0
         db.commit()
-    await scan_event(status="done", found=2, new=1)
+    await scan_event(status="done", found=4, new=2)
 
     # The resident flips the new switch; the before/after check finds the stand lamp, not the ceiling light.
     await orch.move_to("living_wall_1")
@@ -358,35 +384,13 @@ async def new_control(orch: Orchestrator) -> None:
         c.state = ControlState.ON
         db.flush()
         mapping_event, control_event = {**mapping_view(m), "previous_device_id": before}, control_view(c)
-        top = max((r.priority for r in db.scalars(select(Routine).where(Routine.removed_at.is_(None)))), default=0)
-        r = Routine(
-            routine_id=new_id("rt"),
-            mapping_id=mapping_id,
-            action=DeviceAction.OFF,
-            time="23:00",
-            source=RoutineSource.HABIT,
-            independence=Independence.ASK_FIRST,
-            priority=top + 1,
-            reject_streak=0,
-            created_at=now(),
-            updated_at=now(),
-        )
-        db.add(r)
         db.commit()
-        routine_event = routine_view(r)
     await orch.emit("mapping", mapping_event)
     await orch.emit("control", control_event)
     await orch.notify(
         "mapping_fixed",
         "My guess was wrong: the new switch runs the stand lamp, not the ceiling light. I fixed the mapping.",
         mapping_id=mapping_id,
-    )
-    await orch.wait(1.5)
-    await orch.emit("routine", routine_event)
-    await orch.notify(
-        "routine_added",
-        "New routine: turn off the stand lamp at 23:00. I will ask first.",
-        routine_id=routine_event["routine_id"],
     )
     await orch.go_home()
 
@@ -398,8 +402,9 @@ SCENARIOS: dict[str, tuple[str, Callable[[Orchestrator], Awaitable[None]]]] = {
         one_press,
     ),
     "new_control": (
-        "Demo scenario 1. A scan finds a new switch, guesses the ceiling light, the resident flips it, the check "
-        "shows the stand lamp, the mapping is fixed and Verified, a habit routine is added.",
+        "Demo scenario 1. A scan finds a new switch and guesses the ceiling light, and a new power strip mapped "
+        "with caution; the resident flips the switch, the check shows the stand lamp, the mapping is fixed and "
+        "Verified.",
         new_control,
     ),
     "leave_home": (

@@ -294,16 +294,27 @@ def judge_new_control(events: list[Event], devices: dict[str, str], speed: float
         ),
         None,
     )
-    routine = next((e for e in events if e.kind == "routine"), None)
+    strip = next(
+        (
+            e
+            for e in events
+            if e.kind == "mapping" and e.data.get("status") == "Pending" and e.data.get("device_id") is None
+        ),
+        None,
+    )
+    caution = _first(events, "notification", topic="caution")
     flip = _first(events, "notification", topic="flip_request")
 
     rep.check("the scan started and finished", started is not None and done is not None)
     rep.check(
-        "the scan found 2 controls, 1 of them new (FR-01)",
-        done is not None and (done.data.get("found"), done.data.get("new")) == (2, 1),
+        "the scan found 4 controls, 2 of them new (FR-01)",
+        done is not None and (done.data.get("found"), done.data.get("new")) == (4, 2),
         "" if done is None else f"found {done.data.get('found')}, new {done.data.get('new')}",
     )
-    pending = next((e for e in events if e.kind == "mapping" and e.data.get("status") == "Pending"), None)
+    pending = next(
+        (e for e in events if e.kind == "mapping" and e.data.get("status") == "Pending" and e.data.get("device_id")),
+        None,
+    )
     rep.check(
         "a Pending mapping to the guess, the ceiling light (FR-02)",
         pending is not None and pending.data.get("device_id") == ceiling,
@@ -322,9 +333,8 @@ def judge_new_control(events: list[Event], devices: dict[str, str], speed: float
         and verified.data.get("previous_device_id") == ceiling,
     )
     rep.check(
-        "a habit routine was added that asks first (FR-04)",
-        routine is not None and routine.data.get("independence") == "ask_first",
-        "" if routine is None else f"{routine.data.get('action')} at {routine.data.get('time')}",
+        "the new power strip was mapped with caution: Pending, no device, the resident told (FR-06, C-08)",
+        strip is not None and caution is not None and caution.data.get("level") == "warning",
     )
     rep.check("the robot is back at the dock", _robot_back(events))
 
