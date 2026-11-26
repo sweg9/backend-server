@@ -29,7 +29,8 @@ COPY backend-server/src /build/backend-server/src
 RUN pip install --no-deps /build/backend-server && pip install pydantic pyyaml
 
 RUN cd /usr/local/lib/python3.11/site-packages \
-    && rm -rf torch/test torch/include torch/bin pip setuptools wheel
+    && rm -rf torch/test torch/include pip setuptools wheel \
+    && find torch/bin -type f ! -name torch_shm_manager -delete
 
 FROM python:3.11-slim
 ENV PYTHONUNBUFFERED=1 YOLO_CONFIG_DIR=/tmp/ultralytics YOLO_OFFLINE=1 LD_LIBRARY_PATH=/usr/lib64
