@@ -24,11 +24,11 @@ spec:
           args:
             - |
               vsock-proxy 8000 kms.ap-northeast-2.amazonaws.com 443 &
-              nitro-cli run-enclave --eif-path /enclave/ml-engine.eif --cpu-count 2 --memory 4096 --enclave-cid 16
+              nitro-cli run-enclave --eif-path /enclave/ml-engine.eif --cpu-count 2 --memory 8192 --enclave-cid 16
               exec sleep infinity
           resources:
             limits:
               aws.ec2.nitro/nitro_enclaves: "1"
-              hugepages-2Mi: 4096Mi
+              hugepages-2Mi: 8192Mi
               memory: 256Mi
               cpu: 250m

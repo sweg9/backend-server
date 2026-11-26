@@ -45,17 +45,17 @@ The architecture of 2026-11-25: **Hub: Reader → Encryption → (HTTPS) → ser
 
 **Built and tested** (`tests/contract/test_sealing.py`, with a fake KMS that releases keys only to the "attested" enclave): the round trip from the hub to the enclave; only ciphertext in the message; a new key and nonce per photo; a changed, moved or resized photo does not open; another key or another enclave image cannot open it; the size must match the opened photo; no `kms_key_id` means no photo leaves the home.
 
-**Not run yet** against AWS: `KmsDataKeys` (boto3) and `KmstoolKeys` (`kmstool_enclave_cli`). To go on:
+**Ran on real AWS on 2026-11-26** (`deploy/aws-test/`): `KmsDataKeys` sealed a laptop camera photo with a real KMS key, and `KmstoolKeys` opened it only inside a Nitro Enclave whose PCR0 the key policy names. The steps, as done there:
 
 1. **KMS key.** Create a symmetric key; put its id or alias in `settings/hub.yaml` as `kms_key_id`. Its key policy lets the hub's IAM user call `GenerateDataKey` only, and allows `Decrypt` only with the condition `kms:RecipientAttestation:ImageSha384` (PCR0) of the published enclave image. Put the policy in `deploy/README.md`; it changes with every new enclave image.
 2. **The hub's AWS credentials.** An IAM user (or role) for the hub at home with `kms:GenerateDataKey` on that key only, from the environment, never committed (C-10).
 3. **The Reader** (`hub/camera.py`): built. One photo, at most `photo_max_side` px, JPEG, `photo_id` from `new_id("ph")`, sealed with `data_keys(settings)`; on `SealError` the step goes on the safe side and nothing is sent.
-4. **The enclave image.** The program is built (`enclave/main.py`: the server sends the instance role's temporary credentials in `init`, and `build_handlers` makes `KmstoolKeys` from `kms_region`, `kms_proxy_port` and `kmstool_timeout_s` of `settings/enclave.yaml`). Still to do: the enclave Dockerfile with `kmstool_enclave_cli` at `/app/kmstool_enclave_cli` and ai-engine's model files, `nitro-cli build-enclave`, and `vsock-proxy` for KMS on the parent (`ml-engine` pod).
-5. **A test on AWS:** seal on a laptop with the real key, open in the enclave, and check that the parent instance cannot decrypt the key (KMS refuses without the attestation).
+4. **The enclave image.** The program is built (`enclave/main.py`: the server sends the instance role's temporary credentials in `init`, and `build_handlers` makes `KmstoolKeys` from `kms_region`, `kms_proxy_port` and `kmstool_timeout_s` of `settings/enclave.yaml`). The image is `deploy/enclave/Dockerfile` (`kmstool_enclave_cli` at `/app/kmstool_enclave_cli`, ai-engine, CPU-only torch to stay under 2 GiB), built with `nitro-cli build-enclave`; `vsock-proxy` for KMS runs on the parent (from systemd in the test, the `ml-engine` pod in the full path).
+5. **A test on AWS:** seal on a laptop with the real key, open in the enclave: done 2026-11-26. Still to record: that the parent instance's own `aws kms decrypt` of a sealed key is refused (the key policy allows Decrypt only with the attestation).
 
 ### Security notes
 
-> **Notice.** Sealing is tested only with a fake KMS; nothing here has run against AWS KMS or in a Nitro Enclave yet. Do not rely on it to protect real photos until step 5 above has passed.
+> **Notice.** Sealing ran once on real AWS KMS and a real Nitro Enclave (2026-11-26, `deploy/aws-test/`), in a test that left out TLS, so the sealed photo crossed plain HTTP. The photo stayed sealed, but the hub token and the session did not. Keep TLS on for real photos (full path: `deploy/README.md`).
 
 What sealing protects, and what it does not:
 
