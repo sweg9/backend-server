@@ -1,0 +1,26 @@
+# Port 80, any host: /api goes to the server with the prefix stripped, as in deploy/k8s/server/ingress.yaml.
+# Plain HTTP is for this short test only; the real deployment has the domain and TLS.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: strip-api
+  namespace: sweg9
+spec:
+  stripPrefix:
+    prefixes: [/api]
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: sweg9-test
+  namespace: sweg9
+spec:
+  entryPoints: [web]
+  routes:
+    - match: PathPrefix(`/api`)
+      kind: Rule
+      middlewares:
+        - name: strip-api
+      services:
+        - name: server
+          port: 8000

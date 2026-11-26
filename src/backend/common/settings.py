@@ -3,6 +3,7 @@
 A missing or unknown key stops the start: the models forbid extra keys.
 """
 
+import os
 from pathlib import Path
 from typing import Literal, TypeVar
 
@@ -12,7 +13,7 @@ from pydantic import BaseModel, ConfigDict
 from backend.common.vocab import DeviceType, HandOption, Independence, Risk
 
 REPO = Path(__file__).resolve().parents[3]
-SETTINGS_DIR = REPO / "settings"
+SETTINGS_DIR = Path(os.environ.get("BACKEND_SETTINGS_DIR") or REPO / "settings")  # another folder: a test on AWS
 
 
 class Strict(BaseModel):
