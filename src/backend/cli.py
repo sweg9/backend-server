@@ -102,6 +102,47 @@ def _judge(args) -> int:
     return 0 if all(r.passed for r in reports) else 1
 
 
+def _hand(args) -> int:
+    """Talk to the board by hand, for the bench and after an emergency stop. The hub must not be running."""
+    import asyncio
+
+    from backend.common.settings import HubSettings, load
+    from backend.hub.ral.linear_actuators import HandError, LinearActuatorsRal
+
+    s = load(HubSettings, "hub.yaml")
+    port = args.port or s.serial_port
+    if not port:
+        print("set serial_port in settings/hub.yaml or pass --port", file=sys.stderr)
+        return 1
+    ral = LinearActuatorsRal(port, [a.id for a in s.actuators])
+
+    async def go() -> None:
+        try:
+            if args.action == "ping":
+                print("OK PING " + await ral.ping())
+            elif args.action == "press":
+                await ral.press(args.actuator, args.ms)
+                if not args.hold:
+                    await ral.release(args.actuator)
+            elif args.action == "release":
+                await ral.release(args.actuator)
+            elif args.action == "reset":
+                await ral.reset_now()
+            elif args.action == "stop":
+                await ral.ping()
+                await ral.stop()
+        finally:
+            await ral.close()
+
+    try:
+        asyncio.run(go())
+    except HandError as e:
+        print(f"hand: {e}", file=sys.stderr)
+        return 1
+    print("done")
+    return 0
+
+
 def _backup(args) -> int:
     from backend.common import logs
     from backend.common.settings import HubSettings, load
@@ -171,6 +212,13 @@ def main(argv: list[str] | None = None) -> int:
     j.add_argument("--timeout", type=float, default=600, help="seconds for one scenario")
     j.add_argument("--json", help="also write the reports to this file")
     j.set_defaults(func=_judge)
+    hd = sub.add_parser("hand", help="move the linear actuators by hand (bench, reset); the hub must not be running")
+    hd.add_argument("action", choices=["ping", "press", "release", "stop", "reset"])
+    hd.add_argument("actuator", nargs="?", default="A1")
+    hd.add_argument("--ms", type=int, default=400, help="push time for press")
+    hd.add_argument("--hold", action="store_true", help="press without the release after it")
+    hd.add_argument("--port", help="instead of serial_port in settings/hub.yaml")
+    hd.set_defaults(func=_hand)
     sub.add_parser("backup", help="back up the hub's database and crops").set_defaults(func=_backup)
     sub.add_parser("hash-password", help="print the hash for APP_PASSWORD_HASH").set_defaults(func=_hash_password)
     sub.add_parser("export-runs", help="write the run log as JSON Lines (L-08)").set_defaults(

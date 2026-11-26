@@ -55,7 +55,7 @@ def build(
         ended = end_left_open(session, s.time_zone)
     if ended:
         log.warning("ended %d runs left open by a restart", ended)
-    ral = make_ral(s.hand)
+    ral = make_ral(s.hand, s.serial_port, [a.id for a in s.actuators])
 
     async def emit(kind: str, data: dict) -> None:
         await link.event(kind, data)

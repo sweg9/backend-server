@@ -3,7 +3,7 @@
 server_url: wss://nova.example.com/api/ws/hub   # the server on AWS; the domain is still open
 kms_key_id: null             # the KMS key that seals photos (C-05); set when the AWS account is ready
 hand: script                 # linear_actuators | unity_sim | script (FR-11, C-13)
-serial_port: null            # for example /dev/tty.usbserial-0001 with linear_actuators
+serial_port: null            # with linear_actuators, e.g. /dev/cu.usbmodem14101 (Mac, Uno); see firmware/README.md
 camera_index: 0
 photo_max_side: 1280         # longest side of a photo sent to the enclave
 photo_jpeg_quality: 85       # 0 to 100
