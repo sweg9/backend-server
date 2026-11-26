@@ -19,7 +19,7 @@ from backend.common.settings import REPO, HubSettings
 from backend.common.vocab import Channel
 from backend.hub.answers import LinkAnswers
 from backend.hub.app import AppHandlers
-from backend.hub.camera import Reader
+from backend.hub.camera import Exposure, Reader
 from backend.hub.channels.stub import StubAdapter
 from backend.hub.db.session import make_engine, make_sessionmaker
 from backend.hub.link import HubLink
@@ -67,7 +67,12 @@ def build(
             kms.append(data_keys(s))
         return kms[0]
 
-    reader = Reader(s.camera_index, s.photo_max_side, s.photo_jpeg_quality, s.camera_flush_frames, keys=keys)
+    exposure = Exposure(
+        s.camera_lock_exposure, s.camera_exposure_auto, s.camera_exposure_manual, s.camera_settle_frames
+    )
+    reader = Reader(
+        s.camera_index, s.photo_max_side, s.photo_jpeg_quality, s.camera_flush_frames, keys=keys, exposure=exposure
+    )
     if not s.kms_key_id:
         log.warning("kms_key_id is not set: no photo leaves the home, so every camera step goes on the safe side")
 

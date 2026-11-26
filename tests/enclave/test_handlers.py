@@ -236,6 +236,28 @@ def test_verify_passes_the_effect_check(action, answer, expected):
     assert h.open.opened == ["b1", "a1", "a2"]
 
 
+@pytest.mark.fr("FR-08")
+@pytest.mark.fr("FR-11")
+@pytest.mark.parametrize(("main", "second"), [("no", "yes"), ("yes", "no")])
+def test_measures_that_disagree_give_unsure_so_the_hub_never_presses_again(main, second):
+    fake = FakeEngine()
+    fake.script(
+        "check_effect",
+        EngineCheck(
+            main=main,
+            second=second,
+            answer=main,
+            disagree=True,
+            measures={},
+            confidence=0.9,
+            reason="lamp area 7% darker; room 10% brighter",
+        ),
+    )
+    r = handlers(fake).answer(env("check", verify("on"))).body()
+    assert (r.answer, r.change) == ("unsure", "none")
+    assert r.confidence <= 0.5 and r.reason.endswith("the lamp area and the room disagree")
+
+
 # ---------- refind (FR-09)
 
 

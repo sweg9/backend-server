@@ -43,7 +43,7 @@ from backend.hub.db.models import Device, Feedback, Mapping
 
 log = logging.getLogger(__name__)
 Ask = Callable[[str, Msg, float], Awaitable[Envelope | None]]  # HubLink.ask without run_id
-Photo = Callable[[], Awaitable[Sealed | None]]  # Reader.photo
+Photo = Callable[..., Awaitable[Sealed | None]]  # Reader.photo(lock=...)
 WHOLE_VIEW = (0.0, 0.0, 1.0, 1.0)
 
 
@@ -116,7 +116,7 @@ class LinkAnswers:
 
     async def gate(self, device_id: str) -> tuple[bool, str | None]:
         self._before.pop(device_id, None)
-        photo = await self.photo()
+        photo = await self.photo(lock=True)  # also the check's before photo: the exposure stays for the after
         if photo is None:
             return False, "no photo for the safety gate"
         ok, why = await self._people(photo, self.work_area)
@@ -142,7 +142,7 @@ class LinkAnswers:
     async def look_before(self, device_id: str, channel: Channel) -> None:
         self._before.pop(device_id, None)
         if channel == Channel.IR:  # WIFI and BT report the state themselves
-            photo = await self.photo()
+            photo = await self.photo(lock=True)
             if photo is not None:
                 self._before[device_id] = photo
 

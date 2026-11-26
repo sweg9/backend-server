@@ -64,8 +64,10 @@ class Photos:
     def __init__(self, give=True):
         self.give = give
         self.taken = 0
+        self.locks: list[bool] = []
 
-    async def __call__(self):
+    async def __call__(self, lock=False):
+        self.locks.append(lock)
         if not self.give:
             return None
         self.taken += 1
@@ -264,6 +266,18 @@ class Camera:
     def release(self):
         self.released = True
 
+    def get(self, prop):
+        return self.props.get(prop, 0.0) if hasattr(self, "props") else 0.0
+
+    def set(self, prop, value):
+        self.props = getattr(self, "props", {})
+        self.sets = getattr(self, "sets", [])
+        self.sets.append((prop, value))
+        if getattr(self, "refuse", False):
+            return False
+        self.props[prop] = value
+        return True
+
 
 class Keys:
     def new_key(self):
@@ -282,6 +296,43 @@ def test_the_reader_seals_one_fresh_photo_at_most_photo_max_side():
     assert (p.w, p.h) == (1280, 720) and p.photo_id.startswith("ph_")
     assert cam.reads == 3  # two flushed, one kept
     assert r.up
+
+
+@pytest.mark.fr("FR-08")
+def test_the_gate_photo_locks_the_exposure_and_the_after_photo_does_not(db):
+    d = device_id(db)
+    photos = Photos()
+    a = LinkAnswers(Link(people={"clear": True, "confidence": 0.75, "reason": "x"}, check=YES), photos, db, S)
+    run(a.gate(d))
+    run(a.verify(d, Channel.ARM, DeviceAction.OFF, None))
+    assert photos.locks[0] is True and True not in photos.locks[1:]
+
+
+def test_lock_settles_on_auto_then_holds_the_exposure_auto_chose():
+    import cv2
+
+    from backend.hub.camera import Exposure
+
+    cam = Camera([np.zeros((60, 80, 3), np.uint8)] * 40)
+    cam.props = {cv2.CAP_PROP_EXPOSURE: -6.0}
+    r = Reader(0, 1280, 85, 0, keys=Keys, exposure=Exposure(True, 3, 1, 20), open_capture=lambda i: cam)
+    assert run(r.photo(lock=True)) is not None
+    assert cam.sets == [(cv2.CAP_PROP_AUTO_EXPOSURE, 3), (cv2.CAP_PROP_AUTO_EXPOSURE, 1), (cv2.CAP_PROP_EXPOSURE, -6.0)]
+    assert cam.reads == 21  # 20 to settle, then the photo
+    cam.sets.clear()
+    run(r.photo())  # the photo after the command keeps the exposure
+    assert cam.sets == []
+
+
+def test_a_camera_that_refuses_the_lock_still_gives_photos(caplog):
+    from backend.hub.camera import Exposure
+
+    cam = Camera([np.zeros((60, 80, 3), np.uint8)] * 10)
+    cam.refuse = True
+    r = Reader(0, 1280, 85, 0, keys=Keys, exposure=Exposure(True, 3, 1, 2), open_capture=lambda i: cam)
+    assert run(r.photo(lock=True)) is not None
+    assert run(r.photo(lock=True)) is not None
+    assert [m for m in caplog.messages if "exposure lock" in m] == [caplog.messages[0]]  # logged once
 
 
 def test_no_frame_means_no_photo_and_the_camera_is_down():

@@ -4,11 +4,19 @@ written to disk: the frame lives only in memory until it is sealed.
 
 `photo()` gives None when the camera cannot give a frame or the photo cannot be sealed (no `kms_key_id`,
 KMS refused): the step that needed it then goes on the safe side, as for an answer that does not come.
+
+Exposure (FR-08): the camera check compares brightness before and after a command, and auto exposure
+undoes most of that change within a second (seen on a test video: +25% right after a light went on,
++10% a second later). So `photo(lock=True)`, taken just before a press or a wireless command, lets auto
+exposure settle on the room as it is, then locks it; the photos after the command keep that exposure.
+OpenCV's exposure values depend on the camera driver (settings/hub.yaml). A camera that does not take
+the lock is logged once and used as it is.
 """
 
 import asyncio
 import logging
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any, Protocol
 
 import numpy as np
@@ -30,6 +38,22 @@ class Capture(Protocol):
 
     def release(self) -> None: ...
 
+    def get(self, prop: int) -> float: ...
+
+    def set(self, prop: int, value: float) -> bool: ...
+
+
+@dataclass(frozen=True)
+class Exposure:
+    """From settings/hub.yaml. `auto` and `manual` are the values of CAP_PROP_AUTO_EXPOSURE that mean auto
+    and manual exposure for this camera's driver; `settle_frames` frames are read with auto exposure
+    before it is locked."""
+
+    lock: bool
+    auto: float
+    manual: float
+    settle_frames: int
+
 
 def _opencv(index: int) -> Capture:
     import cv2
@@ -49,6 +73,7 @@ class Reader:
         jpeg_quality: int,
         flush_frames: int,
         keys: Callable[[], DataKeys],
+        exposure: Exposure | None = None,
         open_capture: Callable[[int], Capture] = _opencv,
     ):
         self.camera_index = camera_index
@@ -56,17 +81,20 @@ class Reader:
         self.jpeg_quality = jpeg_quality
         self.flush_frames = flush_frames
         self.keys = keys
+        self.exposure = exposure
         self.open_capture = open_capture
         self._cap: Capture | None = None
+        self._lock_failed_logged = False
         self._lock = asyncio.Lock()  # one photo at a time from one camera
         self.up = False  # for hub.status
 
-    async def photo(self) -> Sealed | None:
+    async def photo(self, lock: bool = False) -> Sealed | None:
+        """One sealed photo. `lock`: settle and lock the exposure first (the photo before a command)."""
         async with self._lock:
-            return await asyncio.to_thread(self._take)
+            return await asyncio.to_thread(self._take, lock)
 
-    def _take(self) -> Sealed | None:
-        frame = self._frame()
+    def _take(self, lock: bool = False) -> Sealed | None:
+        frame = self._frame(lock)
         if frame is None:
             return None
         try:
@@ -76,11 +104,13 @@ class Reader:
             log.warning("a photo was not sent: %s", e)  # SealError names the reason, never the photo
             return None
 
-    def _frame(self) -> np.ndarray | None:
+    def _frame(self, lock: bool = False) -> np.ndarray | None:
         if self._cap is None or not self._cap.isOpened():
             self._cap = self.open_capture(self.camera_index)
         ok, frame = False, None
         if self._cap.isOpened():
+            if lock and self.exposure is not None and self.exposure.lock:
+                self._lock_exposure(self._cap, self.exposure)
             for _ in range(self.flush_frames + 1):
                 ok, frame = self._cap.read()
         if not ok or frame is None:
@@ -90,6 +120,18 @@ class Reader:
             return None
         self.up = True
         return frame
+
+    def _lock_exposure(self, cap: Capture, e: Exposure) -> None:
+        import cv2
+
+        cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, e.auto)
+        for _ in range(e.settle_frames):
+            cap.read()
+        value = cap.get(cv2.CAP_PROP_EXPOSURE)  # what auto exposure chose for the room as it is now
+        ok = cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, e.manual) and cap.set(cv2.CAP_PROP_EXPOSURE, value)
+        if not ok and not self._lock_failed_logged:
+            log.warning("the camera did not take the exposure lock; camera checks may come out unsure more often")
+            self._lock_failed_logged = True
 
     def _jpeg(self, frame: np.ndarray) -> tuple[bytes, int, int]:
         import cv2

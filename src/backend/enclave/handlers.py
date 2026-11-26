@@ -190,18 +190,28 @@ class Handlers:
         )
 
     def _verify(self, req: Check, before, after) -> CheckResult:
-        """Did the command work (FR-08). The hub decides on a second look; nothing here presses (C-09)."""
+        """Did the command work (FR-08). The hub decides on a second look; nothing here presses (C-09).
+
+        When the two measures disagree (the lamp area says no, the room says yes, or the other way), the
+        answer is `unsure`: a wrong `no` would make the hub press again (FR-11), and on a switch that
+        toggles, that undoes a press that worked. Seen on a test video where the lamp box missed the lamp.
+        """
         r = self.engine.check_effect(before, after, req.device_box, req.device_type.value, req.action.value)
+        answer, confidence, reason = r.answer, r.confidence, r.reason
+        if r.disagree:
+            answer = "unsure"
+            confidence = min(confidence, 0.5)
+            reason = f"{r.reason}; the lamp area and the room disagree"
         change = "none"
-        if r.answer == "yes":
+        if answer == "yes":
             change = "off_to_on" if req.action == DeviceAction.ON else "on_to_off"
         return CheckResult(
             change=change,
-            answer=r.answer,
+            answer=answer,
             device_box=req.device_box,
             device_type=req.device_type,
-            confidence=r.confidence,
-            reason=r.reason,
+            confidence=confidence,
+            reason=reason,
         )
 
     # ---------- S6: refind and people (FR-09, FR-10)

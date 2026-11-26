@@ -35,6 +35,10 @@ class HubSettings(Strict):
     photo_max_side: int
     photo_jpeg_quality: int
     camera_flush_frames: int
+    camera_lock_exposure: bool
+    camera_exposure_auto: float
+    camera_exposure_manual: float
+    camera_settle_frames: int
     log_file: str
     log_max_mb: int
     log_keep_files: int
