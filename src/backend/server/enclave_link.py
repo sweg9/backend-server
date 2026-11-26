@@ -56,12 +56,14 @@ def vsock(cid: int, port: int) -> Connect:
         if not hasattr(socket, "AF_VSOCK"):
             raise EnclaveUnavailable("this system has no vsock; use enclave_transport: tcp")
         s = socket.socket(socket.AF_VSOCK, socket.SOCK_STREAM)
-        s.setblocking(False)
+        # A blocking connect in a thread: uvloop's sock_connect sends every address through getaddrinfo,
+        # which refuses a (cid, port) pair. The caller's wait_for bounds it.
         try:
-            await asyncio.get_running_loop().sock_connect(s, (cid, port))
+            await asyncio.to_thread(s.connect, (cid, port))
         except BaseException:
             s.close()
             raise
+        s.setblocking(False)
         return await asyncio.open_connection(sock=s)
 
     return connect
