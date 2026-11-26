@@ -37,9 +37,11 @@ $D build -f backend-server/deploy/enclave/Dockerfile --build-arg AI_ENGINE_REV=$
 # linuxkit needs about 5 GB of RAM for this image, and the allocator holds 8 GiB for the enclave: free it meanwhile.
 sudo nitro-cli terminate-enclave --all || true
 sudo systemctl stop nitro-enclaves-allocator.service
-sudo find /tmp -maxdepth 1 -regex '/tmp/[0-9]+' -delete   # exports left by a failed build
+echo 0 | sudo tee /sys/kernel/mm/hugepages/hugepages-1048576kB/nr_hugepages >/dev/null   # stop alone keeps them
+sudo rm -f /tmp/[0-9]*   # exports left by a failed build (/tmp is in RAM)
 sudo nitro-cli build-enclave --docker-uri sweg9/ml-engine:test --output-file $W/ml-engine.eif | tee $W/eif.json
-sudo systemctl start nitro-enclaves-allocator.service
+sync; echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null; echo 1 | sudo tee /proc/sys/vm/compact_memory >/dev/null
+sudo systemctl start nitro-enclaves-allocator.service   # needs the 8 GiB back in large free blocks
 python3 -c "import json;print(json.load(open('$W/eif.json'))['Measurements']['PCR0'])" > $W/pcr0
 
 # 5. The enclave and the vsock proxy it reaches KMS through. Not in debug mode: there the PCRs are zeros and
