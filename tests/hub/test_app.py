@@ -203,6 +203,19 @@ def test_a_control_found_later_stands_beside_the_others_at_its_spot(hub):
     assert at[new_id]["at"]["x"] > at[known_id]["at"]["x"]
 
 
+@pytest.mark.fr("FR-09")
+def test_the_ceiling_light_switches_stand_where_the_scan_shows_them(hub):
+    """Marked on the scan (2026-11-27): on the hallway wall inside each entry, beside the door."""
+    body = hub.call("GET", "/map").body
+    rooms = {r["room"]: r for r in body["rooms"]}
+    spots = {c["spot_id"]: c for c in body["controls"]}
+    for spot_id, entry in (("living_wall_1", "Entry A"), ("bedroom_wall_1", "Entry B")):
+        r, c = rooms[entry], spots[spot_id]
+        for p in (c["at"], c["press_spot"]):
+            assert r["x"] <= p["x"] <= r["x"] + r["w"] and r["y"] <= p["y"] <= r["y"] + r["h"]
+        assert c["at"]["y"] - r["y"] < 10  # on the hallway wall, the entry's top side
+
+
 @pytest.mark.fr("FR-02")
 def test_changing_the_device_of_a_mapping_sends_it_back_to_pending(hub):
     verified = next(m for m in hub.call("GET", "/mappings").body if m["status"] == "Verified")
