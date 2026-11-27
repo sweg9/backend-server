@@ -1,5 +1,5 @@
 {
- "_note": "GET /map for the demo home (demo_home.json), in the Dashboard's HomeLayout frame: centimetres, x to the right, y down, seen from above. rooms, walls, furniture and ceiling are live-demo src/mocks/layout.ts as of 2026-11-26, measured from the map team's LiDAR scan of two dorm rooms. spots and devices are ESTIMATES placed by backend-server: the demo home's living room is drawn in Room A, the bedroom in Room B, the kitchen in Entry A, the hall in the Lobby. The map team replaces them with the positions they mark on the scan. Numbers only, no photos (C-05).",
+ "_note": "GET /map for the demo home (demo_home.json), in the Dashboard's HomeLayout frame: centimetres, x to the right, y down, seen from above. rooms, walls, furniture and ceiling are live-demo src/mocks/layout.ts as of 2026-11-26, measured from the map team's LiDAR scan of two dorm rooms. spots and devices are ESTIMATES placed by backend-server: the demo home's living room is drawn in Room A, the bedroom in Room B, the kitchen in Entry A, the hall in the Lobby. Except living_wall_1 and bedroom_wall_1: the two ceiling light switches, marked on the scan by the Dashboard owner on 2026-11-27, on the hallway wall inside Entry A and Entry B beside the doors. The map team replaces the rest with the positions they mark on the scan. Numbers only, no photos (C-05).",
  "ceiling": 249,
  "dock": {
   "x": 350,
@@ -8,12 +8,12 @@
  "spots": {
   "living_wall_1": {
    "at": {
-    "x": 244,
-    "y": 526
+    "x": 229,
+    "y": 379
    },
    "press_spot": {
-    "x": 244,
-    "y": 575
+    "x": 229,
+    "y": 428
    }
   },
   "living_tv": {
@@ -48,12 +48,12 @@
   },
   "bedroom_wall_1": {
    "at": {
-    "x": 560,
-    "y": 526
+    "x": 487,
+    "y": 386
    },
    "press_spot": {
-    "x": 560,
-    "y": 575
+    "x": 487,
+    "y": 435
    }
   },
   "bedroom_purifier": {
@@ -303,17 +303,17 @@
   {
    "kind": "wardrobe",
    "x": 42,
-   "y": 736,
+   "y": 728,
    "w": 30,
-   "d": 90,
+   "d": 98,
    "h": 200
   },
   {
    "kind": "desk",
    "x": 72,
-   "y": 742,
-   "w": 78,
-   "d": 84,
+   "y": 728,
+   "w": 76,
+   "d": 98,
    "h": 75
   },
   {
@@ -326,18 +326,18 @@
   },
   {
    "kind": "desk",
-   "x": 252,
-   "y": 726,
-   "w": 70,
-   "d": 100,
+   "x": 238,
+   "y": 722,
+   "w": 84,
+   "d": 104,
    "h": 75
   },
   {
    "kind": "wardrobe",
    "x": 322,
-   "y": 726,
+   "y": 722,
    "w": 24,
-   "d": 100,
+   "d": 104,
    "h": 200
   },
   {
@@ -351,17 +351,17 @@
   {
    "kind": "wardrobe",
    "x": 354,
-   "y": 738,
+   "y": 726,
    "w": 26,
-   "d": 88,
+   "d": 100,
    "h": 200
   },
   {
    "kind": "desk",
    "x": 380,
-   "y": 730,
-   "w": 76,
-   "d": 96,
+   "y": 726,
+   "w": 84,
+   "d": 100,
    "h": 75
   },
   {
@@ -375,17 +375,17 @@
   {
    "kind": "desk",
    "x": 557,
-   "y": 740,
+   "y": 736,
    "w": 86,
-   "d": 88,
+   "d": 90,
    "h": 75
   },
   {
    "kind": "wardrobe",
    "x": 643,
-   "y": 740,
+   "y": 736,
    "w": 18,
-   "d": 88,
+   "d": 90,
    "h": 200
   },
   {
