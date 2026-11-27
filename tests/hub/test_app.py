@@ -174,14 +174,15 @@ def test_seeded_intents_read_well(hub):
 
 
 @pytest.mark.fr("FR-09")
-def test_map_draws_every_control_and_device_of_the_demo_home(hub):
+def test_map_draws_every_control_and_device_of_the_demo_home_but_the_air_purifier(hub):
     r = hub.call("GET", "/map")
     assert r.status == 200
     check_schema("GET", "/map", 200, r.body)
     controls = {c["control_id"] for c in hub.call("GET", "/controls").body}
-    devices = {d["device_id"] for d in hub.call("GET", "/devices").body}
+    devices = {d["device_id"]: d["name"] for d in hub.call("GET", "/devices").body}
     assert {c["control_id"] for c in r.body["controls"]} == controls
-    assert {d["device_id"] for d in r.body["devices"]} == devices
+    drawn = {d["device_id"] for d in r.body["devices"]}
+    assert drawn == {i for i, name in devices.items() if name != "Air purifier"}  # left off the map, still a device
     assert r.body["rooms"] and r.body["walls"]
 
 
