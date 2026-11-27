@@ -1,5 +1,5 @@
 {
- "_note": "GET /map for the demo home (demo_home.json), in the Dashboard's HomeLayout frame: centimetres, x to the right, y down, seen from above. rooms, walls, furniture and ceiling are live-demo src/mocks/layout.ts as of 2026-11-26, measured from the map team's LiDAR scan of two dorm rooms. spots and devices are ESTIMATES placed by backend-server: the demo home's living room is drawn in Room A, the bedroom in Room B, the kitchen in Entry A, the hall in the Lobby. Except living_wall_1 and bedroom_wall_1: the two ceiling light switches, marked on the scan by the Dashboard owner on 2026-11-27, on the hallway wall inside Entry A and Entry B beside the doors. The map team replaces the rest with the positions they mark on the scan. The air purifier is left off the map (Dashboard owner, 2026-11-27): it is still a device, only not drawn. Numbers only, no photos (C-05).",
+ "_note": "GET /map for the demo home (demo_home.json), in the Dashboard's HomeLayout frame: centimetres, x to the right, y down, seen from above. rooms, walls, furniture and ceiling are live-demo src/mocks/layout.ts as of 2026-11-26, measured from the map team's LiDAR scan of two dorm rooms. spots and devices are ESTIMATES placed by backend-server: the demo home's living room is drawn in Room A, the bedroom in Room B, the kitchen in Entry A, the hall in the Lobby. Except living_wall_1 and bedroom_wall_1: the two ceiling light switches, marked on the scan by the Dashboard owner on 2026-11-27, on the hallway wall inside Entry A and Entry B beside the doors. The map team replaces the rest with the positions they mark on the scan. The air purifier is left off the map (Dashboard owner, 2026-11-27): it is still a device, only not drawn. The hallway is open at both ends and its far wall is two pieces, open opposite the lobby, each with a neighbour's door (the 90 cm gaps), as on the scan and the map team's model (2026-11-27). Numbers only, no photos (C-05).",
  "ceiling": 249,
  "dock": {
   "x": 350,
@@ -268,20 +268,34 @@
   [
    30,
    148,
+   96,
+   148,
+   12
+  ],
+  [
+   186,
+   148,
+   252,
+   148,
+   12
+  ],
+  [
+   445,
+   148,
+   512,
+   148,
+   12
+  ],
+  [
+   602,
+   148,
    670,
    148,
    12
   ],
   [
-   30,
-   148,
-   30,
-   370,
-   12
-  ],
-  [
    670,
-   148,
+   380,
    670,
    520,
    12
