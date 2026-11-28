@@ -174,14 +174,15 @@ def test_seeded_intents_read_well(hub):
 
 
 @pytest.mark.fr("FR-09")
-def test_map_draws_every_control_and_device_of_the_demo_home(hub):
+def test_map_draws_every_control_and_device_of_the_demo_home_but_the_air_purifier(hub):
     r = hub.call("GET", "/map")
     assert r.status == 200
     check_schema("GET", "/map", 200, r.body)
     controls = {c["control_id"] for c in hub.call("GET", "/controls").body}
-    devices = {d["device_id"] for d in hub.call("GET", "/devices").body}
+    devices = {d["device_id"]: d["name"] for d in hub.call("GET", "/devices").body}
     assert {c["control_id"] for c in r.body["controls"]} == controls
-    assert {d["device_id"] for d in r.body["devices"]} == devices
+    drawn = {d["device_id"] for d in r.body["devices"]}
+    assert drawn == {i for i, name in devices.items() if name != "Air purifier"}  # left off the map, still a device
     assert r.body["rooms"] and r.body["walls"]
 
 
@@ -201,6 +202,19 @@ def test_a_control_found_later_stands_beside_the_others_at_its_spot(hub):
     assert at[new_id]["spot_id"] == at[known_id]["spot_id"] == "living_wall_1"
     assert at[new_id]["press_spot"] == at[known_id]["press_spot"]
     assert at[new_id]["at"]["x"] > at[known_id]["at"]["x"]
+
+
+@pytest.mark.fr("FR-09")
+def test_the_ceiling_light_switches_stand_where_the_scan_shows_them(hub):
+    """Marked on the scan (2026-11-27): on the hallway wall inside each entry, beside the door."""
+    body = hub.call("GET", "/map").body
+    rooms = {r["room"]: r for r in body["rooms"]}
+    spots = {c["spot_id"]: c for c in body["controls"]}
+    for spot_id, entry in (("living_wall_1", "Entry A"), ("bedroom_wall_1", "Entry B")):
+        r, c = rooms[entry], spots[spot_id]
+        for p in (c["at"], c["press_spot"]):
+            assert r["x"] <= p["x"] <= r["x"] + r["w"] and r["y"] <= p["y"] <= r["y"] + r["h"]
+        assert c["at"]["y"] - r["y"] < 10  # on the hallway wall, the entry's top side
 
 
 @pytest.mark.fr("FR-02")
